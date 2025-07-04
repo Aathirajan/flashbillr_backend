@@ -1,0 +1,51 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+logs/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.*
+
+# Dependency directories
+jspm_packages/
+
+# Build output
+build/
+dist/
+out/
+
+# Coverage reports
+coverage/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Prisma
+prisma/dev.db
+prisma/*.sqlite
+
+# Misc
+*.tgz
+*.swp
+
+# GitHub workflows cache (optional)
+.github/workflows/*-cache/
+
+# Ignore apidoc output if generated
+apidoc/
+
+# Ignore package-lock backup
+package-lock.json.*

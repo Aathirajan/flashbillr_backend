@@ -1,0 +1,326 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPERADMIN
+  STOREADMIN
+}
+
+enum OrderStatus {
+  PAID
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  brandColor  String   @default("#3B82F6") // Hex color for invoices
+  address     String?
+  phone       String?
+  email       String?
+  gstNumber   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  createdById String
+
+  // Relations
+  users         User[]   @relation("StoreUsers")
+  products      Product[]
+  inventory     Inventory[]
+  orders        Order[]
+  invoices      Invoice[]
+  customers     Customer[]
+  posReceipts   POSReceipt[]
+  subscriptions Subscription[]
+  creator       User    @relation("StoreCreator", fields: [createdById], references: [id])
+
+  @@map("stores")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole
+  phone     String?
+  isActive  Boolean  @default(true)
+  storeId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  createdById String
+
+  // Relations
+  store     Store?   @relation("StoreUsers", fields: [storeId], references: [id])
+  createdStores Store[] @relation("StoreCreator")
+  creator   User?    @relation("UserCreator", fields: [createdById], references: [id])
+  createdUsers User[] @relation("UserCreator")
+
+  addresses Address[]
+  orders    Order[]
+
+  passwordResetTokens PasswordResetToken[] @relation("PasswordResetTokens")
+
+  @@map("users")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  brand       String?
+  sku         String
+  mrp         Float
+  sellingPrice Float
+  gstRate     Float    @default(18.0)
+  youtubeUrl  String?  // YouTube video URL for product demo
+  isActive    Boolean  @default(true)
+  storeId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  store       Store         @relation(fields: [storeId], references: [id])
+  images      ProductImage[]
+  inventory   Inventory[]
+  orderItems  OrderItem[]
+
+  @@unique([sku, storeId])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  url       String   // Firebase storage URL
+  productId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+model Inventory {
+  id            String   @id @default(cuid())
+  productId     String
+  storeId       String
+  currentStock  Int      @default(0)
+  minStockLevel Int      @default(10)
+  maxStockLevel Int      @default(1000)
+  lastRestocked DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+
+  @@unique([productId, storeId])
+  @@map("inventory")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  notes     String?
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  store  Store   @relation(fields: [storeId], references: [id])
+  orders Order[]
+
+  @@map("customers")
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  customerId      String?
+  userId          String?
+  guestName       String?
+  guestEmail      String?
+  guestPhone      String?
+  addressId       String?
+  storeId         String
+  status          OrderStatus @default(PAID)
+  subtotal        Float
+  gstAmount       Float
+  totalAmount     Float
+  paymentMethod   String      @default("CASH")
+  notes           String?
+  lrNumber        String?     // Logistics Receipt Number
+  lrPhotoUrl      String?     // Firebase URL for LR photo
+  paymentScreenshotUrl String? // Storage URL for payment screenshot
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  user       User?       @relation(fields: [userId], references: [id])
+  address    Address?    @relation("OrderAddress", fields: [addressId], references: [id])
+  store      Store       @relation(fields: [storeId], references: [id])
+  orderItems OrderItem[]
+  invoices   Invoice[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  unitPrice   Float
+  gstRate     Float
+  gstAmount   Float
+  totalAmount Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  orderId       String?
+  storeId       String
+  customerId    String?
+  subtotal      Float
+  gstAmount     Float
+  totalAmount   Float
+  pdfUrl        String?  // Firebase URL for PDF
+  isPos         Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  order Order? @relation(fields: [orderId], references: [id])
+  store Store  @relation(fields: [storeId], references: [id])
+
+  @@map("invoices")
+}
+
+model POSReceipt {
+  id             String   @id @default(cuid())
+  receiptNumber  String   @unique
+  storeId        String
+  customerName   String?
+  customerPhone  String?
+  items          Json     // Store items as JSON for POS receipts
+  subtotal       Float
+  gstAmount      Float
+  totalAmount    Float
+  amountReceived Float?   // Amount actually received from customer
+  paymentMethod  String   @default("CASH")
+  pdfUrl         String?  // Firebase URL for PDF
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("pos_receipts")
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String?
+  name      String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  zip       String
+  country   String
+  phone     String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User?    @relation(fields: [userId], references: [id])
+  orders    Order[]  @relation("OrderAddress")
+
+  @@map("addresses")
+}
+
+model PasswordResetToken {
+
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation("PasswordResetTokens", fields: [userId], references: [id])
+
+  @@map("password_reset_tokens")
+}
+
+model Subscription {
+  id        String             @id @default(cuid())
+  storeId   String
+  status    SubscriptionStatus @default(ACTIVE)
+  startDate DateTime
+  endDate   DateTime
+  amount    Float
+  notes     String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("subscriptions")
+}

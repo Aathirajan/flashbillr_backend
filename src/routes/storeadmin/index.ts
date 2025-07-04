@@ -1,0 +1,26 @@
+import express from 'express';
+import { authenticate, requireStoreAdmin } from '@/middleware/auth';
+import dashboardRoutes from './dashboard';
+import productsRoutes from './products';
+import inventoryRoutes from './inventory';
+import customersRoutes from './customers';
+import ordersRoutes from './orders';
+import posRoutes from './pos';
+import invoicesRoutes from './invoices';
+
+const router = express.Router();
+
+// Apply authentication and authorization to all store admin routes
+router.use(authenticate);
+router.use(requireStoreAdmin);
+
+// Mount sub-routes
+router.use('/dashboard', dashboardRoutes);
+router.use('/products', productsRoutes);
+router.use('/inventory', inventoryRoutes);
+router.use('/customers', customersRoutes);
+router.use('/orders', ordersRoutes);
+router.use('/pos', posRoutes);
+router.use('/invoices', invoicesRoutes);
+
+export default router;
