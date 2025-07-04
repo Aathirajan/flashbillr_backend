@@ -1,12 +1,12 @@
 import express from 'express';
 import multer from 'multer';
-import { prisma } from '@/utils/database';
-import { validate } from '@/middleware/validation';
-import { createProductSchema, updateProductSchema } from '@/utils/validation';
-import { createError } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
-import { AuthenticatedRequest } from '@/middleware/auth';
-import { uploadFile } from '@/services/firebase';
+import { prisma } from '../../utils/database';
+import { validate } from '../../middleware/validation';
+import { createProductSchema, updateProductSchema } from '../../utils/validation';
+import { createError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
+import { AuthenticatedRequest } from '../../middleware/auth';
+import { uploadFile } from '../../services/firebase';
 
 const router = express.Router();
 

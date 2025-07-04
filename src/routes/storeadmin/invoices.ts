@@ -1,8 +1,8 @@
 import express from 'express';
-import { prisma } from '@/utils/database';
-import { createError } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
-import { AuthenticatedRequest } from '@/middleware/auth';
+import { prisma } from '../../utils/database';
+import { createError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
+import { AuthenticatedRequest } from '../../middleware/auth';
 
 const router = express.Router();
 

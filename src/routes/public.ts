@@ -1,8 +1,109 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { prisma } from '@/utils/database';
 import { createError } from '@/middleware/errorHandler';
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     tags: [Public]
+ *     summary: Get project information
+ *     description: Returns a detailed explanation of the project, its features, and metadata.
+ *     responses:
+ *       200:
+ *         description: Project information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 name:
+ *                   type: string
+ *                 description:
+ *                   type: string
+ *                 features:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 version:
+ *                   type: string
+ *                 environment:
+ *                   type: string
+ *                 repository:
+ *                   type: string
+ *                 author:
+ *                   type: string
+ */
+router.get('/', (req: Request, res: Response) => {
+  res.json({
+    name: 'Flashbillr Backend',
+    description: 'Flashbillr is a robust backend service designed to support fast, scalable, and secure billing and order management for stores. It provides APIs for authentication, product management, order processing, and reporting.',
+    features: [
+      'User authentication and authorization',
+      'Store and product management',
+      'Order processing and tracking',
+      'PDF invoice generation',
+      'Email notifications',
+      'Comprehensive API documentation (Swagger)',
+      'Robust error handling and logging',
+      'Rate limiting and security best practices',
+      'Database integration with Prisma/PostgreSQL',
+      'Environment-based configuration',
+    ],
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    repository: 'https://github.com/Aathirajan/flashbillr_backend',
+    author: 'Aathirajan',
+  });
+});
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     tags: [Public]
+ *     summary: Get service health status
+ *     description: Returns detailed health information about the backend service, including uptime, version, environment, database status, and current time.
+ *     responses:
+ *       200:
+ *         description: Health status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 uptime:
+ *                   type: number
+ *                 version:
+ *                   type: string
+ *                 environment:
+ *                   type: string
+ *                 database:
+ *                   type: string
+ *                 currentTime:
+ *                   type: string
+ */
+router.get('/health', async (req: Request, res: Response) => {
+  let dbStatus = 'unknown';
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = 'connected';
+  } catch (err) {
+    dbStatus = 'disconnected';
+  }
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    database: dbStatus,
+    currentTime: new Date().toISOString(),
+  });
+});
 
 /**
  * @swagger

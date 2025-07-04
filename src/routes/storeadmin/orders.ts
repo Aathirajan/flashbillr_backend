@@ -1,17 +1,17 @@
 import express from 'express';
 import multer from 'multer';
-import { prisma } from '@/utils/database';
-import { validate } from '@/middleware/validation';
-import { createOrderSchema } from '@/utils/validation';
-import { convertNumberToWords } from '@/utils/numberUtils';
-import { createError } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
-import { AuthenticatedRequest } from '@/middleware/auth';
-import { generateInvoicePDF } from '@/services/pdfGenerator';
-import { uploadInvoicePDF, uploadLRPhoto } from '@/services/firebase';
-import { sendOrderConfirmationEmail, sendOrderShippedEmail } from '@/services/mailgun';
-import { InvoiceData as DatabaseInvoiceData } from '@/types';
-import { InvoiceData as PDFInvoiceData } from '@/services/pdfGenerator';
+import { prisma } from '../../utils/database';
+import { validate } from '../../middleware/validation';
+import { createOrderSchema } from '../../utils/validation';
+import { convertNumberToWords } from '../../utils/numberUtils';
+import { createError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
+import { AuthenticatedRequest } from '../../middleware/auth';
+import { generateInvoicePDF } from '../../services/pdfGenerator';
+import { uploadInvoicePDF, uploadLRPhoto } from '../../services/firebase';
+import { sendOrderConfirmationEmail, sendOrderShippedEmail } from '../../services/mailgun';
+import { InvoiceData as DatabaseInvoiceData } from '../../types';
+import { InvoiceData as PDFInvoiceData } from '../../services/pdfGenerator';
 
 interface InvoiceItem {
   name: string;

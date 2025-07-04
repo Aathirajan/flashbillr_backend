@@ -1,13 +1,13 @@
 import express from 'express';
-import { prisma } from '@/utils/database';
-import { validate } from '@/middleware/validation';
-import { createPOSReceiptSchema } from '@/utils/validation';
-import { convertNumberToWords } from '@/utils/numberUtils';
-import { createError } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
-import { AuthenticatedRequest } from '@/middleware/auth';
-import { generateInvoicePDF } from '@/services/pdfGenerator';
-import { uploadInvoicePDF } from '@/services/firebase';
+import { prisma } from '../../utils/database';
+import { validate } from '../../middleware/validation';
+import { createPOSReceiptSchema } from '../../utils/validation';
+import { convertNumberToWords } from '../../utils/numberUtils';
+import { createError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
+import { AuthenticatedRequest } from '../../middleware/auth';
+import { generateInvoicePDF } from '../../services/pdfGenerator';
+import { uploadInvoicePDF } from '../../services/firebase';
 
 const router = express.Router();
 

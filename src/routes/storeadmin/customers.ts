@@ -1,10 +1,10 @@
 import express from 'express';
-import { prisma } from '@/utils/database';
-import { validate } from '@/middleware/validation';
-import { createCustomerSchema } from '@/utils/validation';
-import { createError } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
-import { AuthenticatedRequest } from '@/middleware/auth';
+import { prisma } from '../../utils/database';
+import { validate } from '../../middleware/validation';
+import { createCustomerSchema } from '../../utils/validation';
+import { createError } from '../../middleware/errorHandler';
+import { logger } from '../../utils/logger';
+import { AuthenticatedRequest } from '../../middleware/auth';
 import Joi from 'joi';
 
 const router = express.Router();
