@@ -1,6 +1,14 @@
 # Flashbillr API Documentation
 
-This document provides a comprehensive reference for integrating with the Flashbillr backend API. It covers all endpoints, authentication, request/response formats, error handling, and integration requirements for frontend and AI clients.
+## Project Overview
+
+Flashbillr is a backend system powering a multi-tenant retail platform, supporting three main frontend applications:
+
+- **Crackers Storefront**: The public-facing e-commerce site where customers can browse products, place orders, and track their purchases. This uses public and guest endpoints (e.g., `/api/publicOrders`).
+- **Store Admin Panel**: Used by individual store managers to manage products, inventory, orders, POS, and customer data for their specific store. These endpoints are namespaced under `/api/storeadmin/*` and require store admin authentication.
+- **Super Admin Panel**: Used by platform administrators to manage all stores, users, subscriptions, and platform-wide settings. These endpoints are under `/api/superadmin/*` and require super admin authentication.
+
+Each frontend authenticates using JWT tokens (except public endpoints). The API is organized to clearly separate access and permissions for each role.
 
 ---
 
@@ -49,14 +57,127 @@ All endpoints are prefixed with `/api`.
 
 ---
 
-## Endpoints Overview
+## API Endpoint Groups
 
-### Authentication (`/api/auth`)
-- `POST /api/auth/register` — Register a new user
-- `POST /api/auth/login` — Login and receive JWT
-- `POST /api/auth/forgot-password` — Request password reset
-- `POST /api/auth/reset-password` — Reset password with token
-- `GET /api/auth/profile` — Get current user profile (auth required)
+### 1. Crackers Storefront (Public Endpoints)
+
+#### Orders
+- **POST** `/api/public/orders` — Place an order as guest or authenticated user.
+  - **Body (multipart/form-data):**
+    - `items`: JSON stringified array of order items
+    - `paymentMethod`: string
+    - `guestName`, `guestEmail`, `guestPhone`: strings (for guest checkout)
+    - `address`: JSON stringified address object
+    - `addressId`: string (if using saved address)
+    - `paymentScreenshot`: file (optional, proof of payment)
+  - **Returns:** `201 Created` with order details and tracking URL
+  - **Example Response:**
+    ```json
+    {
+      "message": "Order placed successfully",
+      "orderNumber": "ORD123456",
+      "orderId": "clx...",
+      "trackingUrl": "/api/public/orders/track?orderNumber=ORD123456&email=...",
+      "order": { ... }
+    }
+    ```
+
+- **GET** `/api/public/orders/track` — Track an order by order number and email/phone (guest) or userId (auth).
+  - **Query:** `orderNumber`, `email` or `phone` (guests), or `userId` (auth)
+
+- **GET** `/api/public/orders/guest-history` — Get past orders for a guest user (by email/phone)
+
+#### Public Data
+- **GET** `/api/public/stores` — List all public stores
+- **GET** `/api/public/products` — List all public products
+
+---
+
+### 2. Store Admin Panel (`/api/storeadmin`)
+> All endpoints require authentication as a store admin (`Authorization: Bearer <token>`)
+
+#### Dashboard
+- **GET** `/api/storeadmin/dashboard` — Store analytics, sales, inventory, and product stats
+
+#### Products
+- **GET** `/api/storeadmin/products` — List products for the store
+- **POST** `/api/storeadmin/products` — Add a new product
+- **PUT** `/api/storeadmin/products/:id` — Update a product
+- **DELETE** `/api/storeadmin/products/:id` — Soft delete a product
+
+#### Inventory
+- **GET** `/api/storeadmin/inventory` — List inventory items
+- **POST** `/api/storeadmin/inventory/bulk-update` — Bulk update inventory
+- **GET** `/api/storeadmin/inventory/low-stock` — List low stock items and trigger notifications
+
+#### Orders
+- **GET** `/api/storeadmin/orders` — List orders for the store
+- **PUT** `/api/storeadmin/orders/:id/ship` — Mark order as shipped (accepts file upload: `lrPhoto`)
+
+#### Customers
+- **GET** `/api/storeadmin/customers` — List store customers
+
+#### POS
+- **GET** `/api/storeadmin/pos` — POS receipts and analytics
+
+#### Invoices
+- **GET** `/api/storeadmin/invoices` — List invoices for the store
+
+---
+
+### 3. Super Admin Panel (`/api/superadmin`)
+> All endpoints require authentication as a super admin (`Authorization: Bearer <token>`)
+
+#### Stores
+- **GET** `/api/superadmin/stores` — List all stores
+- **POST** `/api/superadmin/stores` — Create a new store
+- **GET** `/api/superadmin/stores/:id` — Get store details
+- **PUT** `/api/superadmin/stores/:id` — Update store
+- **DELETE** `/api/superadmin/stores/:id` — Soft delete store
+- **POST** `/api/superadmin/stores/:id/price-list` — Generate and download store price list PDF
+
+#### Users
+- **GET** `/api/superadmin/users` — List all users
+- **POST** `/api/superadmin/users/store-admin` — Create a store admin user
+- **GET** `/api/superadmin/users/:id` — Get user by ID
+- **PUT** `/api/superadmin/users/:id` — Update user
+- **DELETE** `/api/superadmin/users/:id` — Soft delete user
+
+#### Subscriptions
+- **GET** `/api/superadmin/subscriptions` — List all subscriptions
+- **POST** `/api/superadmin/subscriptions` — Create a subscription
+- **GET** `/api/superadmin/subscriptions/store/:storeId` — List subscriptions for a store
+
+#### Dashboard
+- **GET** `/api/superadmin/dashboard` — Platform-wide analytics
+
+---
+
+### 4. File Uploads
+- Endpoints expecting files use `multipart/form-data`.
+- For orders: `paymentScreenshot` (public), `lrPhoto` (storeadmin).
+- Max file size: 5MB.
+
+---
+
+### 5. Authentication
+- Most endpoints require Bearer JWT (`Authorization: Bearer <token>`).
+- Public endpoints (storefront) do not require authentication.
+
+---
+
+### 6. Error Handling
+- All errors are returned as JSON:
+  ```json
+  { "error": "Error message" }
+  ```
+- Validation errors:
+  ```json
+  { "error": "Validation error details" }
+  ```
+- Standard HTTP status codes are used.
+
+---
 
 ### Public (`/api/public`)
 - Publicly accessible endpoints for store/product discovery
