@@ -8,6 +8,7 @@ import ordersRoutes from './orders';
 import posRoutes from './pos';
 import invoicesRoutes from './invoices';
 import notificationsRoutes from './notifications';
+import meRoutes from './me';
 
 const router = express.Router();
 
@@ -24,5 +25,6 @@ router.use('/orders', ordersRoutes);
 router.use('/pos', posRoutes);
 router.use('/invoices', invoicesRoutes);
 router.use('/notifications', notificationsRoutes);
+router.use('/me', meRoutes);
 
 export default router;
