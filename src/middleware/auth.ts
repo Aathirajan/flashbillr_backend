@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JWTPayload } from '@/utils/auth';
 
-import { logger } from '@/utils/logger';
+// logger removed
 import { UserRole } from '@prisma/client';
 
 export interface AuthenticatedRequest extends Request {
@@ -23,7 +23,7 @@ export const authenticate = (req: AuthenticatedRequest, res: Response, next: Nex
     req.user = decoded;
     next();
   } catch (error) {
-    logger.error('Authentication error:', error);
+    console.error('Authentication error:', error);
     res.status(401).json({ error: 'Invalid or expired token' });
     return;
   }

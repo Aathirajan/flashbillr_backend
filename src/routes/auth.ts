@@ -4,7 +4,7 @@ import { hashPassword, comparePassword, generateToken, generateRandomPassword } 
 import { validate } from '@/middleware/validation';
 import { loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '@/utils/validation';
 import { createError } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
+// logger removed
 import { sendPasswordResetEmail } from '@/services/mailgun';
 import { authenticate, AuthenticatedRequest } from '@/middleware/auth';
 import jwt from 'jsonwebtoken';
@@ -122,7 +122,7 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
       storeId: user.storeId || undefined
     });
 
-    logger.info('User logged in successfully:', {
+    console.info('User logged in successfully:', {
       userId: user.id,
       email: user.email,
       role: user.role
@@ -278,7 +278,7 @@ router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res,
     // Send password reset email
     await sendPasswordResetEmail(email, resetToken, user.store?.name);
 
-    logger.info('Password reset email sent:', {
+    console.info('Password reset email sent:', {
       userId: user.id,
       email: user.email
     });
@@ -364,7 +364,7 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req, res, n
       data: { password: hashedPassword }
     });
 
-    logger.info('Password reset successfully:', {
+    console.info('Password reset successfully:', {
       userId: user.id,
       email: user.email
     });
@@ -463,7 +463,7 @@ router.post('/change-password', authenticate, validate(changePasswordSchema), as
       data: { password: hashedPassword }
     });
 
-    logger.info('Password changed successfully:', {
+    console.info('Password changed successfully:', {
       userId: user.id,
       email: user.email
     });

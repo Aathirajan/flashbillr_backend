@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { logger } from '@/utils/logger';
+// logger removed
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -16,7 +16,7 @@ export const errorHandler = (
   const message = error.message || 'Internal Server Error';
 
   // Log error
-  logger.error('Error occurred:', {
+  console.error('Error occurred:', {
     error: error.message,
     stack: error.stack,
     url: req.url,
