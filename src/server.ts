@@ -23,6 +23,24 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Global logger middleware to log every request
+app.use((req, res, next) => {
+  const user = (req as any).user;
+  logger.info('Incoming request', {
+    time: new Date().toISOString(),
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    hasAuthToken: Boolean(req.headers.authorization),
+    user: user ? {
+      id: user.userId || user.id,
+      email: user.email
+    } : undefined
+  });
+  next();
+});
+
 // Security middleware
 app.use(helmet());
 const allowedOrigins = [
