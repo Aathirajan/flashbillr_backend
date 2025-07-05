@@ -27,6 +27,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/public ./public
 
 # (Optional) Copy any other files needed at runtime, e.g. static assets, .env
 
