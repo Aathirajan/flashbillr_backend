@@ -178,6 +178,44 @@ router.post(
         },
       });
 
+      // Notify specific store admin(s) about new public order
+      try {
+        const { createNotification } = await import('../services/notification');
+        const store = await prisma.store.findUnique({
+          where: { id: order.storeId },
+          include: { users: true }
+        });
+        if (store && store.users && store.users.length > 0) {
+          // Notify all store admins (users with STOREADMIN role)
+          const adminUsers = store.users.filter(u => u.role === 'STOREADMIN');
+          if (adminUsers.length > 0) {
+            await Promise.all(adminUsers.map(admin =>
+              createNotification({
+                type: 'NEW_ORDER',
+                message: `New public order placed: #${order.orderNumber} for ₹${order.totalAmount}`,
+                userId: admin.id
+              })
+            ));
+          } else {
+            // Fallback to global if no admin found
+            await createNotification({
+              type: 'NEW_ORDER',
+              message: `New public order placed: #${order.orderNumber} for ₹${order.totalAmount}`,
+              userId: undefined
+            });
+          }
+        } else {
+          // Fallback to global if no users found
+          await createNotification({
+            type: 'NEW_ORDER',
+            message: `New public order placed: #${order.orderNumber} for ₹${order.totalAmount}`,
+            userId: undefined
+          });
+        }
+      } catch (notifyErr) {
+        console.error('Failed to create order notification:', notifyErr);
+      }
+
       // Send payment screenshot notification email if uploaded
       if (paymentScreenshotUrl) {
         try {

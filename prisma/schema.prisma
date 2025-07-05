@@ -48,6 +48,8 @@ model Store {
   users         User[]   @relation("StoreUsers")
   products      Product[]
   inventory     Inventory[]
+
+
   orders        Order[]
   invoices      Invoice[]
   customers     Customer[]
@@ -83,6 +85,8 @@ model User {
   orders    Order[]
 
   passwordResetTokens PasswordResetToken[] @relation("PasswordResetTokens")
+
+  notifications Notification[]
 
   @@map("users")
 }
@@ -204,6 +208,18 @@ model Order {
   invoices   Invoice[]
 
   @@map("orders")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  type      String
+  message   String
+  userId    String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
 }
 
 model OrderItem {
