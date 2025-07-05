@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate, requireStoreAdmin } from '@/middleware/auth';
+import { authenticate, requireStoreAdmin } from '../../middleware/auth';
 import dashboardRoutes from './dashboard';
 import productsRoutes from './products';
 import inventoryRoutes from './inventory';

@@ -609,7 +609,7 @@ router.get('/orders/guest-history', async (req: AuthenticatedRequest, res: any, 
 
 import crypto from 'crypto';
 import { hash } from 'bcryptjs';
-import { sendPasswordResetEmail } from '@/services/mailgun';
+import { sendPasswordResetEmail } from '../services/mailgun';
 
 /**
  * POST /api/public/password/forgot

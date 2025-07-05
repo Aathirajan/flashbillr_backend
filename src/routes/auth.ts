@@ -1,12 +1,12 @@
 import express from 'express';
-import { prisma } from '@/utils/database';
-import { hashPassword, comparePassword, generateToken, generateRandomPassword } from '@/utils/auth';
-import { validate } from '@/middleware/validation';
-import { loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '@/utils/validation';
-import { createError } from '@/middleware/errorHandler';
+import { prisma } from '../utils/database';
+import { hashPassword, comparePassword, generateToken, generateRandomPassword } from '../utils/auth';
+import { validate } from '../middleware/validation';
+import { loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '../utils/validation';
+import { createError } from '../middleware/errorHandler';
 // logger removed
-import { sendPasswordResetEmail } from '@/services/mailgun';
-import { authenticate, AuthenticatedRequest } from '@/middleware/auth';
+import { sendPasswordResetEmail } from '../services/mailgun';
+import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 
 const router = express.Router();
