@@ -684,55 +684,22 @@ const options: swaggerJsdoc.Options = {
         description: 'Public endpoints for storefront access'
       },
       {
-        name: 'Store Admin - Dashboard',
-        description: 'Store admin dashboard and analytics'
+        name: 'Store Admin',
+        description: 'Endpoints for store admin operations (dashboard, products, inventory, customers, orders, POS, invoices)'
       },
       {
-        name: 'Store Admin - Products',
-        description: 'Product management for store admins'
-      },
-      {
-        name: 'Store Admin - Inventory',
-        description: 'Inventory management for store admins'
-      },
-      {
-        name: 'Store Admin - Customers',
-        description: 'Customer management for store admins'
-      },
-      {
-        name: 'Store Admin - Orders',
-        description: 'Order management for store admins'
-      },
-      {
-        name: 'Store Admin - POS',
-        description: 'Point of sale operations for store admins'
-      },
-      {
-        name: 'Store Admin - Invoices',
-        description: 'Invoice management for store admins'
-      },
-      {
-        name: 'Super Admin - Dashboard',
-        description: 'Super admin dashboard and analytics'
-      },
-      {
-        name: 'Super Admin - Stores',
-        description: 'Store management for super admins'
-      },
-      {
-        name: 'Super Admin - Users',
-        description: 'User management for super admins'
-      },
-      {
-        name: 'Super Admin - Subscriptions',
-        description: 'Subscription management for super admins'
+        name: 'Super Admin',
+        description: 'Endpoints for super admin operations (dashboard, stores, users, subscriptions)'
       }
     ]
   },
   apis: [
     './src/routes/*.ts',
     './src/routes/storeadmin/*.ts',
-    './src/routes/superadmin/*.ts'
+    './src/routes/superadmin/*.ts',
+    './dist/routes/*.js',
+    './dist/routes/storeadmin/*.js',
+    './dist/routes/superadmin/*.js'
   ]
 };
 
