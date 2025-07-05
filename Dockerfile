@@ -2,6 +2,8 @@
 FROM node:20-slim AS builder
 WORKDIR /app
 
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl
 # Install all dependencies (including devDependencies)
 COPY package*.json ./
 RUN npm ci
@@ -15,6 +17,8 @@ RUN npm run build
 FROM node:20-slim AS prod
 WORKDIR /app
 
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl
 # Only copy production dependencies
 COPY package*.json ./
 RUN npm ci --omit=dev
