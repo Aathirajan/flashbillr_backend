@@ -2,7 +2,7 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl"]
 }
 
@@ -31,37 +31,37 @@ enum SubscriptionStatus {
 }
 
 model Store {
-  id             String   @id @default(cuid())
-  name           String
-  slug           String   @unique
-  tagline        String?
-  logo           String?
-  brandColor     String   @default("#3B82F6")
+  id         String  @id @default(cuid())
+  name       String
+  slug       String  @unique
+  tagline    String?
+  logo       String?
+  brandColor String  @default("#3B82F6")
 
   // Contact & Identity
-  phone          String?
-  email          String
-  whatsapp       String?
-  address        String?
-  ownerName      String?
-  gstNumber      String?
-  license        String?
-  certification  String?
+  phone           String?
+  email           String
+  whatsapp        String?
+  address         String?
+  ownerName       String?
+  gstNumber       String?
+  license         String?
+  certification   String?
   establishedYear Int?
 
   // Description
-  description     String?
-  foundedYear     Int?
-  experience      String?
-  mission         String?
-  vision          String?
+  description String?
+  foundedYear Int?
+  experience  String?
+  mission     String?
+  vision      String?
 
   // Payment
-  upiId           String?
-  qrCodeUrl       String?
+  upiId     String?
+  qrCodeUrl String?
 
   // Featured Brands
-  featuredBrands  FeaturedBrand[]
+  featuredBrands FeaturedBrand[]
 
   // Features
   isPosEnabled Boolean @default(true)
@@ -72,50 +72,50 @@ model Store {
   seoKeywords    String?
 
   // System
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  deletedAt     DateTime?
-  createdById   String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  createdById String
 
   // Relations
-  creator       User         @relation("StoreCreator", fields: [createdById], references: [id])
-  users         User[]       @relation("StoreUsers")
-  products      Product[]
-  orders        Order[]
-  invoices      Invoice[]
-  customers     Customer[]
-  posReceipts   POSReceipt[]
-  socialLinks   SocialMediaLink[]
-  inventories Inventory[]
-subscriptions Subscription[]
-  bankAccounts BankAccount[]
+  creator        User              @relation("StoreCreator", fields: [createdById], references: [id])
+  users          User[]            @relation("StoreUsers")
+  products       Product[]
+  orders         Order[]
+  invoices       Invoice[]
+  customers      Customer[]
+  posReceipts    POSReceipt[]
+  socialLinks    SocialMediaLink[]
+  inventories    Inventory[]
+  subscriptions  Subscription[]
+  bankAccounts   BankAccount[]
+  supportTickets SupportTicket[]
 
   @@map("stores")
 }
 
-
 model BankAccount {
-  id             String @id @default(cuid())
-  storeId        String
-  accountName    String
-  accountNumber  String
-  ifscCode       String
-  bankName       String
+  id            String @id @default(cuid())
+  storeId       String
+  accountName   String
+  accountNumber String
+  ifscCode      String
+  bankName      String
 
-  store          Store @relation(fields: [storeId], references: [id])
+  store Store @relation(fields: [storeId], references: [id])
 
   @@map("bank_accounts")
 }
 
 model FeaturedBrand {
-  id        String @id @default(cuid())
-  storeId   String
-  brandId   String
-  name      String
-  logo      String
+  id      String @id @default(cuid())
+  storeId String
+  brandId String
+  name    String
+  logo    String
 
-  store     Store @relation(fields: [storeId], references: [id])
+  store Store @relation(fields: [storeId], references: [id])
 
   @@map("featured_brands")
 }
@@ -126,36 +126,31 @@ model SocialMediaLink {
   platform String
   url      String
 
-  store    Store  @relation(fields: [storeId], references: [id])
+  store Store @relation(fields: [storeId], references: [id])
 
   @@map("social_links")
 }
 
-
-
-
-
-
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  firstName String
-  lastName  String
-  role      UserRole
-  phone     String?
-  isActive  Boolean  @default(true)
-  storeId   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  firstName   String
+  lastName    String
+  role        UserRole
+  phone       String?
+  isActive    Boolean   @default(true)
+  storeId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
   createdById String?
 
   // Relations
-  store     Store?   @relation("StoreUsers", fields: [storeId], references: [id])
+  store         Store?  @relation("StoreUsers", fields: [storeId], references: [id])
   createdStores Store[] @relation("StoreCreator")
-  creator   User?    @relation("UserCreator", fields: [createdById], references: [id])
-  createdUsers User[] @relation("UserCreator")
+  creator       User?   @relation("UserCreator", fields: [createdById], references: [id])
+  createdUsers  User[]  @relation("UserCreator")
 
   addresses Address[]
   orders    Order[]
@@ -168,27 +163,27 @@ model User {
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  category    String
-  brand       String?
-  sku         String
-  mrp         Float
+  id           String    @id @default(cuid())
+  name         String
+  description  String?
+  category     String
+  brand        String?
+  sku          String
+  mrp          Float
   sellingPrice Float
-  gstRate     Float    @default(18.0)
-  youtubeUrl  String?  // YouTube video URL for product demo
-  isActive    Boolean  @default(true)
-  storeId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
+  gstRate      Float     @default(18.0)
+  youtubeUrl   String? // YouTube video URL for product demo
+  isActive     Boolean   @default(true)
+  storeId      String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
   // Relations
-  store       Store         @relation(fields: [storeId], references: [id])
-  images      ProductImage[]
-  inventory   Inventory[]
-  orderItems  OrderItem[]
+  store      Store          @relation(fields: [storeId], references: [id])
+  images     ProductImage[]
+  inventory  Inventory[]
+  orderItems OrderItem[]
 
   @@unique([sku, storeId])
   @@map("products")
@@ -196,7 +191,7 @@ model Product {
 
 model ProductImage {
   id        String   @id @default(cuid())
-  url       String   // Firebase storage URL
+  url       String // Firebase storage URL
   productId String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -208,15 +203,15 @@ model ProductImage {
 }
 
 model Inventory {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   productId     String
   storeId       String
-  currentStock  Int      @default(0)
-  minStockLevel Int      @default(10)
-  maxStockLevel Int      @default(1000)
+  currentStock  Int       @default(0)
+  minStockLevel Int       @default(10)
+  maxStockLevel Int       @default(1000)
   lastRestocked DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
   // Relations
@@ -228,7 +223,7 @@ model Inventory {
 }
 
 model Customer {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   firstName String
   lastName  String
   email     String?
@@ -239,8 +234,8 @@ model Customer {
   pincode   String?
   notes     String?
   storeId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   // Relations
@@ -251,29 +246,29 @@ model Customer {
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  orderNumber     String      @unique
-  customerId      String?
-  userId          String?
-  guestName       String?
-  guestEmail      String?
-  guestPhone      String?
-  addressId       String?
-  storeId         String
-  status          OrderStatus @default(PAID)
-  subtotal        Float
-  gstAmount       Float
-  totalAmount     Float
-  paymentMethod   String      @default("CASH")
-  notes           String?
-  lrNumber        String?     // Logistics Receipt Number
-  lrPhotoUrl      String?     // Firebase URL for LR photo
+  id                   String      @id @default(cuid())
+  orderNumber          String      @unique
+  customerId           String?
+  userId               String?
+  guestName            String?
+  guestEmail           String?
+  guestPhone           String?
+  addressId            String?
+  storeId              String
+  status               OrderStatus @default(PAID)
+  subtotal             Float
+  gstAmount            Float
+  totalAmount          Float
+  paymentMethod        String      @default("CASH")
+  notes                String?
+  lrNumber             String? // Logistics Receipt Number
+  lrPhotoUrl           String? // Firebase URL for LR photo
   paymentScreenshotUrl String? // Storage URL for payment screenshot
-  shippedAt       DateTime?
-  deliveredAt     DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  deletedAt       DateTime?
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  deletedAt            DateTime?
 
   // Relations
   customer   Customer?   @relation(fields: [customerId], references: [id])
@@ -298,6 +293,21 @@ model Notification {
   @@map("notifications")
 }
 
+model SupportTicket {
+  id        String   @id @default(cuid())
+  storeId   String
+  title     String
+  message   String
+  status    String   @default("OPEN") // OPEN, IN_PROGRESS, CLOSED
+  response  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("support_tickets")
+}
+
 model OrderItem {
   id          String   @id @default(cuid())
   orderId     String
@@ -318,18 +328,18 @@ model OrderItem {
 }
 
 model Invoice {
-  id            String   @id @default(cuid())
-  invoiceNumber String   @unique
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
   orderId       String?
   storeId       String
   customerId    String?
   subtotal      Float
   gstAmount     Float
   totalAmount   Float
-  pdfUrl        String?  // Firebase URL for PDF
-  isPos         Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  pdfUrl        String? // Firebase URL for PDF
+  isPos         Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
   // Relations
@@ -340,20 +350,20 @@ model Invoice {
 }
 
 model POSReceipt {
-  id             String   @id @default(cuid())
-  receiptNumber  String   @unique
+  id             String    @id @default(cuid())
+  receiptNumber  String    @unique
   storeId        String
   customerName   String?
   customerPhone  String?
-  items          Json     // Store items as JSON for POS receipts
+  items          Json // Store items as JSON for POS receipts
   subtotal       Float
   gstAmount      Float
   totalAmount    Float
-  amountReceived Float?   // Amount actually received from customer
-  paymentMethod  String   @default("CASH")
-  pdfUrl         String?  // Firebase URL for PDF
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  amountReceived Float? // Amount actually received from customer
+  paymentMethod  String    @default("CASH")
+  pdfUrl         String? // Firebase URL for PDF
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
   // Relations
@@ -378,14 +388,13 @@ model Address {
   updatedAt DateTime @updatedAt
 
   // Relations
-  user      User?    @relation(fields: [userId], references: [id])
-  orders    Order[]  @relation("OrderAddress")
+  user   User?   @relation(fields: [userId], references: [id])
+  orders Order[] @relation("OrderAddress")
 
   @@map("addresses")
 }
 
 model PasswordResetToken {
-
   id        String   @id @default(cuid())
   userId    String
   token     String   @unique

@@ -29,5 +29,7 @@ router.use('/stores', socialMediaLinkRoutes);
 router.use('/users', userRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/subscriptions', subscriptionRoutes);
+router.use('/notifications', require('./notifications').default);
+router.use('/support-tickets', require('./supportTickets').default);
 
 export default router;

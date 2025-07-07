@@ -9,6 +9,23 @@ import { uploadFile } from '../../services/firebase';
 
 const router = express.Router();
 
+// Check store slug uniqueness
+router.get('/check-slug', async (req, res, next) => {
+  try {
+    const { slug } = req.query;
+    if (typeof slug !== 'string' || !slug.match(/^[a-z0-9-]{2,50}$/)) {
+      return res.status(400).json({ valid: false, message: 'Invalid slug format.' });
+    }
+    const existing = await prisma.store.findUnique({ where: { slug } });
+    if (existing) {
+      return res.json({ valid: false, message: 'Slug already exists.' });
+    }
+    return res.json({ valid: true, message: 'Slug is available.' });
+  } catch (error) {
+    next(error);
+    return; 
+  }
+});
 /**
  * @swagger
  * /api/superadmin/stores:
@@ -310,31 +327,67 @@ router.get('/:id', async (req, res, next) => {
  */
 router.post('/', validate(createStoreSchema), async (req, res, next) => {
   try {
-    const storeData = req.body;
+    function parseIntOrNull(value: any) {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? null : parsed;
+}
 
-    // Check if slug is unique
-    const existingStore = await prisma.store.findUnique({
-      where: { slug: storeData.slug }
-    });
+const storeData = req.body;
 
-    if (existingStore) {
-      throw createError('Store slug already exists', 409);
+// Validate and convert establishedYear and foundedYear
+const parsedEstablishedYear = parseIntOrNull(storeData.establishedYear);
+const parsedFoundedYear = parseIntOrNull(storeData.foundedYear);
+
+if (
+  (storeData.establishedYear && parsedEstablishedYear === null) ||
+  (storeData.foundedYear && parsedFoundedYear === null)
+) {
+  return res.status(400).json({
+    error: 'Invalid value for establishedYear or foundedYear. Expected integer or null.'
+  });
+}
+
+// Check if slug is unique
+const existingStore = await prisma.store.findUnique({
+  where: { slug: storeData.slug }
+});
+
+if (existingStore) {
+  throw createError('Store slug already exists', 409);
+}
+
+try {
+  const store = await prisma.store.create({
+    data: {
+      ...storeData,
+      establishedYear: parsedEstablishedYear,
+      foundedYear: parsedFoundedYear
     }
+  });
 
-    const store = await prisma.store.create({
-      data: storeData
-    });
+  logger.info('Store created successfully', {
+    storeId: store.id,
+    storeName: store.name,
+    slug: store.slug
+  });
 
-    logger.info('Store created successfully', {
-      storeId: store.id,
-      storeName: store.name,
-      slug: store.slug
-    });
+  res.status(201).json({ store });
+} catch (prismaError) {
+  logger.error('Prisma error creating store', { prismaError, body: req.body });
+  let errorMessage = 'Unknown error';
+  if (typeof prismaError === 'object' && prismaError !== null && 'message' in prismaError) {
+    errorMessage = (prismaError as any).message;
+  }
+  return res.status(400).json({
+    error: 'Failed to create store. Please check your input fields.',
+    details: errorMessage
+  });
+}
 
-    res.status(201).json({ store });
   } catch (error) {
     logger.error('Error creating store', { error, body: req.body });
-    next(error);
+    return next(error);
   }
 });
 

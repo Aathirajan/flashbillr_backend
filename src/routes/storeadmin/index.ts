@@ -27,4 +27,6 @@ router.use('/invoices', invoicesRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/me', meRoutes);
 
+router.use('/support-tickets', require('./supportTickets').default);
+
 export default router;
