@@ -31,35 +31,110 @@ enum SubscriptionStatus {
 }
 
 model Store {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  brandColor  String   @default("#3B82F6") // Hex color for invoices
-  address     String?
-  phone       String?
-  email       String?
-  gstNumber   String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-  createdById String
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  tagline        String?
+  logo           String?
+  brandColor     String   @default("#3B82F6")
+
+  // Contact & Identity
+  phone          String?
+  email          String
+  whatsapp       String?
+  address        String?
+  ownerName      String?
+  gstNumber      String?
+  license        String?
+  certification  String?
+  establishedYear Int?
+
+  // Description
+  description     String?
+  foundedYear     Int?
+  experience      String?
+  mission         String?
+  vision          String?
+
+  // Payment
+  upiId           String?
+  qrCodeUrl       String?
+
+  // Featured Brands
+  featuredBrands  FeaturedBrand[]
+
+  // Features
+  isPosEnabled Boolean @default(true)
+
+  // SEO
+  seoTitle       String?
+  seoDescription String?
+  seoKeywords    String?
+
+  // System
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+  createdById   String
 
   // Relations
-  users         User[]   @relation("StoreUsers")
+  creator       User         @relation("StoreCreator", fields: [createdById], references: [id])
+  users         User[]       @relation("StoreUsers")
   products      Product[]
-  inventory     Inventory[]
-
-
   orders        Order[]
   invoices      Invoice[]
   customers     Customer[]
   posReceipts   POSReceipt[]
-  subscriptions Subscription[]
-  creator       User    @relation("StoreCreator", fields: [createdById], references: [id])
+  socialLinks   SocialMediaLink[]
+  inventories Inventory[]
+subscriptions Subscription[]
+  bankAccounts BankAccount[]
 
   @@map("stores")
 }
+
+
+model BankAccount {
+  id             String @id @default(cuid())
+  storeId        String
+  accountName    String
+  accountNumber  String
+  ifscCode       String
+  bankName       String
+
+  store          Store @relation(fields: [storeId], references: [id])
+
+  @@map("bank_accounts")
+}
+
+model FeaturedBrand {
+  id        String @id @default(cuid())
+  storeId   String
+  brandId   String
+  name      String
+  logo      String
+
+  store     Store @relation(fields: [storeId], references: [id])
+
+  @@map("featured_brands")
+}
+
+model SocialMediaLink {
+  id       String @id @default(cuid())
+  storeId  String
+  platform String
+  url      String
+
+  store    Store  @relation(fields: [storeId], references: [id])
+
+  @@map("social_links")
+}
+
+
+
+
+
 
 model User {
   id        String   @id @default(cuid())

@@ -88,8 +88,10 @@ router.get('/', async (req, res, next) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    logger.info('Fetched all stores', { count: stores.length });
     res.json({ stores });
   } catch (error) {
+    logger.error('Error fetching all stores', { error });
     next(error);
   }
 });
@@ -222,11 +224,13 @@ router.get('/:id', async (req, res, next) => {
     });
 
     if (!store) {
+      logger.warn('Store not found', { storeId: id });
       throw createError('Store not found', 404);
     }
-
+    logger.info('Fetched store by ID', { storeId: id, storeName: store.name });
     res.json({ store });
   } catch (error) {
+    logger.error('Error fetching store by ID', { error, storeId: req.params.id });
     next(error);
   }
 });
@@ -321,7 +325,7 @@ router.post('/', validate(createStoreSchema), async (req, res, next) => {
       data: storeData
     });
 
-    logger.info('Store created successfully:', {
+    logger.info('Store created successfully', {
       storeId: store.id,
       storeName: store.name,
       slug: store.slug
@@ -329,6 +333,7 @@ router.post('/', validate(createStoreSchema), async (req, res, next) => {
 
     res.status(201).json({ store });
   } catch (error) {
+    logger.error('Error creating store', { error, body: req.body });
     next(error);
   }
 });
@@ -491,6 +496,7 @@ router.delete('/:id', async (req, res, next) => {
     });
 
     if (!store) {
+      logger.warn('Store not found for deletion', { storeId: id });
       throw createError('Store not found', 404);
     }
 
@@ -499,13 +505,14 @@ router.delete('/:id', async (req, res, next) => {
       data: { deletedAt: new Date() }
     });
 
-    logger.info('Store deleted successfully:', {
+    logger.info('Store deleted successfully', {
       storeId: id,
       storeName: store.name
     });
 
     res.json({ message: 'Store deleted successfully' });
   } catch (error) {
+    logger.error('Error deleting store', { error, storeId: req.params.id });
     next(error);
   }
 });
@@ -559,6 +566,7 @@ router.post('/:id/price-list', async (req, res, next) => {
     });
 
     if (!store) {
+      logger.warn('Store not found for price list generation', { storeId: id });
       throw createError('Store not found', 404);
     }
 
@@ -597,7 +605,7 @@ router.post('/:id/price-list', async (req, res, next) => {
     const fileName = `price-list-${store.slug}-${Date.now()}.pdf`;
     const pdfUrl = await uploadFile(pdfBuffer, fileName, 'application/pdf', `stores/${store.id}/price-lists`);
 
-    logger.info('Price list generated successfully:', {
+    logger.info('Price list generated successfully', {
       storeId: store.id,
       storeName: store.name,
       pdfUrl
@@ -608,6 +616,7 @@ router.post('/:id/price-list', async (req, res, next) => {
       pdfUrl 
     });
   } catch (error) {
+    logger.error('Error generating price list PDF', { error, storeId: req.params.id });
     next(error);
   }
 });

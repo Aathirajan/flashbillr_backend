@@ -5,6 +5,10 @@ import { updateStoreAdminSchema } from '../../utils/validation/storeAdmin';
 import { createError } from '../../middleware/errorHandler';
 import { AuthenticatedRequest } from '../../types/auth';
 
+import meBankAccountRoutes from './meBankAccount';
+import meFeaturedBrandRoutes from './meFeaturedBrand';
+import meSocialMediaLinkRoutes from './meSocialMediaLink';
+
 const router = express.Router();
 
 // Get own profile
@@ -73,5 +77,9 @@ router.patch('/', validate(updateStoreAdminSchema), async (req: AuthenticatedReq
     next(error);
   }
 });
+
+router.use(meBankAccountRoutes);
+router.use(meFeaturedBrandRoutes);
+router.use(meSocialMediaLinkRoutes);
 
 export default router;

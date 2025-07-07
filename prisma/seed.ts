@@ -7,6 +7,9 @@ async function main() {
   // --- 1. Delete all data from relevant tables (order matters due to FKs) ---
   console.log('Cleaning existing data...');
   await prisma.order.deleteMany({});
+  await prisma.invoice.deleteMany({});
+  await prisma.pOSReceipt.deleteMany({});
+  await prisma.subscription.deleteMany({});
   await prisma.customer.deleteMany({});
   await prisma.product.deleteMany({});
   await prisma.store.deleteMany({});
@@ -14,163 +17,159 @@ async function main() {
 
   // --- 2. Create superadmin ---
   const superAdminEmail = 'saathirajan99@gmail.com';
-  const adminEmail = 'work.aathirajan@gmail.com';
-  const password = 'password';
-  const hashedPassword = await hash(password, 12);
+  const superAdminPassword = 'password';
+  const hashedSuperAdminPassword = await hash(superAdminPassword, 12);
 
   console.log('Creating superadmin...');
   const superadmin = await prisma.user.create({
     data: {
       email: superAdminEmail,
-      password: hashedPassword,
+      password: hashedSuperAdminPassword,
       firstName: 'Super',
       lastName: 'Admin',
       role: 'SUPERADMIN',
       isActive: true,
     },
   });
-  await prisma.user.update({ 
-    where: { id: superadmin.id }, 
-    data: { createdById: superadmin.id } 
+  await prisma.user.update({
+    where: { id: superadmin.id },
+    data: { createdById: superadmin.id },
   });
 
-  // --- 3. Create test store ---
-  console.log('Creating demo store...');
-  const store = await prisma.store.create({
-    data: {
-      name: 'Demo Store',
-      slug: 'demo-store',
-      brandColor: '#FF5733',
-      email: 'store@example.com',
-      createdById: superadmin.id,
-    },
-  });
+  // --- 3. Create 5 stores, each with a store admin, product, customer, order, invoice, POSReceipt, and subscription ---
+  for (let i = 1; i <= 5; i++) {
+    const storeName = `Demo Store ${i}`;
+    const storeSlug = `demo-store-${i}`;
+    const storeEmail = `store${i}@example.com`;
+    const storeBrandColor = '#FF5733';
+    const storeAdminEmail = `store${i}.admin@mail.com`;
+    const storeAdminPassword = 'password';
+    const hashedStoreAdminPassword = await hash(storeAdminPassword, 12);
 
-  // --- 4. Create store admin and assign to store ---
-  console.log('Creating store admin...');
-  const storeadmin = await prisma.user.create({
-    data: {
-      email: adminEmail,
-      password: hashedPassword,
-      firstName: 'Store',
-      lastName: 'Admin',
-      role: 'STOREADMIN',
-      isActive: true,
-      createdById: superadmin.id,
-      storeId: store.id,
-    },
-  });
-  await prisma.user.update({ 
-    where: { id: storeadmin.id }, 
-    data: { createdById: storeadmin.id } 
-  });
+    console.log(`Creating store: ${storeName}`);
+    const store = await prisma.store.create({
+      data: {
+        name: storeName,
+        slug: storeSlug,
+        brandColor: storeBrandColor,
+        email: storeEmail,
+        createdById: superadmin.id,
+      },
+    });
 
-  // --- 5. Create products ---
-  console.log('Creating products...');
-  const productsData = [
-    {
-      name: 'Product A',
-      description: 'First demo product',
-      category: 'General',
-      brand: 'BrandX',
-      sku: 'SKU-DEMO-A',
-      mrp: 120,
-      sellingPrice: 100,
-      gstRate: 18,
-      storeId: store.id,
-      isActive: true,
-    },
-    {
-      name: 'Product B',
-      description: 'Second demo product',
-      category: 'General',
-      brand: 'BrandY',
-      sku: 'SKU-DEMO-B',
-      mrp: 220,
-      sellingPrice: 200,
-      gstRate: 18,
-      storeId: store.id,
-      isActive: true,
-    },
-    {
-      name: 'Product C',
-      description: 'Third demo product',
-      category: 'General',
-      brand: 'BrandZ',
-      sku: 'SKU-DEMO-C',
-      mrp: 320,
-      sellingPrice: 300,
-      gstRate: 18,
-      storeId: store.id,
-      isActive: true,
-    },
-  ];
+    console.log(`Creating store admin for ${storeName}`);
+    const storeadmin = await prisma.user.create({
+      data: {
+        email: storeAdminEmail,
+        password: hashedStoreAdminPassword,
+        firstName: `Store${i}`,
+        lastName: 'Admin',
+        role: 'STOREADMIN',
+        isActive: true,
+        createdById: superadmin.id,
+        storeId: store.id,
+      },
+    });
+    await prisma.user.update({
+      where: { id: storeadmin.id },
+      data: { createdById: storeadmin.id },
+    });
 
-  const createdProducts = [];
-  for (const prodData of productsData) {
-    const product = await prisma.product.create({ data: prodData });
-    createdProducts.push(product);
-    console.log(`Created product: ${product.name}`);
-  }
+    // Create one product
+    console.log(`Creating product for ${storeName}`);
+    const product = await prisma.product.create({
+      data: {
+        name: `Product ${i}`,
+        description: `Demo product for ${storeName}`,
+        category: 'General',
+        brand: `Brand${i}`,
+        sku: `SKU-DEMO-${i}`,
+        mrp: 100 + i * 10,
+        sellingPrice: 90 + i * 10,
+        gstRate: 18,
+        storeId: store.id,
+        isActive: true,
+      },
+    });
 
-  // --- 6. Create customers ---
-  console.log('Creating customers...');
-  const customersData = [
-    {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.demo@mail.com',
-      phone: '1111111111',
-      storeId: store.id,
-    },
-    {
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane.demo@mail.com',
-      phone: '2222222222',
-      storeId: store.id,
-    },
-  ];
+    // Create one customer
+    console.log(`Creating customer for ${storeName}`);
+    const customer = await prisma.customer.create({
+      data: {
+        firstName: `Customer${i}`,
+        lastName: 'Demo',
+        email: `customer${i}@mail.com`,
+        phone: `900000000${i}`,
+        storeId: store.id,
+      },
+    });
 
-  const createdCustomers = [];
-  for (const custData of customersData) {
-    const customer = await prisma.customer.create({ data: custData });
-    createdCustomers.push(customer);
-    console.log(`Created customer: ${customer.email}`);
-  }
+    // Create one order
+    console.log(`Creating order for ${storeName}`);
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `ORD-DEMO-${i}`,
+        storeId: store.id,
+        customerId: customer.id,
+        status: OrderStatus.PAID,
+        subtotal: product.sellingPrice,
+        gstAmount: product.sellingPrice * 0.18,
+        totalAmount: product.sellingPrice * 1.18,
+        paymentMethod: 'CASH',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
 
-  // --- 7. Create orders ---
-  console.log('Creating orders...');
-  const ordersData = [
-    {
-      orderNumber: 'ORD-DEMO-1',
-      storeId: store.id,
-      customerId: createdCustomers[0].id,
-      status: OrderStatus.PAID,
-      subtotal: createdProducts[0].sellingPrice,
-      gstAmount: createdProducts[0].sellingPrice * 0.18,
-      totalAmount: createdProducts[0].sellingPrice * 1.18,
-      paymentMethod: 'CASH',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      orderNumber: 'ORD-DEMO-2',
-      storeId: store.id,
-      customerId: createdCustomers[1].id,
-      status: OrderStatus.PAID,
-      subtotal: createdProducts[1].sellingPrice,
-      gstAmount: createdProducts[1].sellingPrice * 0.18,
-      totalAmount: createdProducts[1].sellingPrice * 1.18,
-      paymentMethod: 'CASH',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
+    // Create one invoice
+    console.log(`Creating invoice for ${storeName}`);
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: `INV-DEMO-${i}`,
+        orderId: order.id,
+        storeId: store.id,
+        customerId: customer.id,
+        subtotal: product.sellingPrice,
+        gstAmount: product.sellingPrice * 0.18,
+        totalAmount: product.sellingPrice * 1.18,
+        isPos: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
 
-  for (const orderData of ordersData) {
-    const order = await prisma.order.create({ data: orderData });
-    console.log(`Created order: ${order.orderNumber}`);
+    // Create one POSReceipt
+    console.log(`Creating POSReceipt for ${storeName}`);
+    await prisma.pOSReceipt.create({
+      data: {
+        receiptNumber: `POSR-DEMO-${i}`,
+        storeId: store.id,
+        customerName: `Customer${i} Demo`,
+        customerPhone: `900000000${i}`,
+        items: [{ sku: product.sku, name: product.name, qty: 1, price: product.sellingPrice }],
+        subtotal: product.sellingPrice,
+        gstAmount: product.sellingPrice * 0.18,
+        totalAmount: product.sellingPrice * 1.18,
+        paymentMethod: 'CASH',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create one subscription
+    console.log(`Creating subscription for ${storeName}`);
+    await prisma.subscription.create({
+      data: {
+        storeId: store.id,
+        status: 'ACTIVE',
+        startDate: new Date(),
+        endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+        amount: 999,
+        notes: `Demo subscription for ${storeName}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
   }
 
   console.log('Database seeded successfully!');

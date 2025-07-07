@@ -190,7 +190,17 @@ app.get('/', (req, res) => {
   res.sendFile('index.html', { root: 'public' });
 });
 
-// API Routes
+// =============================
+// API ROUTE MOUNTING STRUCTURE
+// =============================
+// All routers must be mounted under their correct API prefixes for production readiness:
+//   /api/superadmin   -> superadminRoutes (sub-routes: /stores, /users, etc.)
+//   /api/storeadmin   -> storeadminRoutes
+//   /api/public       -> publicRoutes
+//   /api/auth         -> authRoutes
+// This ensures all endpoints are predictable and frontend/backend are always in sync.
+// =============================
+
 app.use('/api/auth', authRoutes);
 app.use('/api/superadmin', superadminRoutes);
 app.use('/api/storeadmin', storeadminRoutes);
