@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { prisma } from '../../utils/database';
 import { hashPassword, generateRandomPassword } from '../../utils/auth';
-import { sendStoreAdminOnboardingEmail } from '../../services/mailgun';
+import { sendStoreAdminOnboardingEmail } from '../../services/emailService';
 import { createError } from '../../middleware/errorHandler';
 import { AuthenticatedRequest } from '../../types/auth';
 import { logger } from '../../utils/logger';
@@ -14,7 +14,8 @@ const createStoreAdminSchema = Joi.object({
   email: Joi.string().email().required(),
   firstName: Joi.string().min(2).max(50).required(),
   lastName: Joi.string().min(2).max(50).required(),
-  storeId: Joi.string().required()
+  storeId: Joi.string().required(),
+  phone: Joi.string().optional()
 });
 
 /**

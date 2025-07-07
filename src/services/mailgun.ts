@@ -20,31 +20,64 @@ export interface EmailOptions {
   }>;
 }
 
-export const sendEmail = async (options: EmailOptions): Promise<void> => {
-  try {
-    const messageData = {
-      from: process.env.MAILGUN_FROM_EMAIL!,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text || options.html.replace(/<[^>]*>/g, ''),
-      attachment: options.attachments
-    };
+import nodemailer from 'nodemailer';
 
-    const result = await mg.messages.create(process.env.MAILGUN_DOMAIN!, messageData);
-    
-    logger.info('Email sent successfully:', {
-      to: options.to,
-      subject: options.subject,
-      messageId: result.id
-    });
-  } catch (error) {
-    logger.error('Failed to send email:', {
-      to: options.to,
-      subject: options.subject,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-    throw error;
+const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'mailgun';
+
+const smtpTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+export const sendEmail = async (options: EmailOptions): Promise<void> => {
+  if (EMAIL_SERVICE === 'nodemailer') {
+    try {
+      await smtpTransporter.sendMail({
+        from: process.env.MAILGUN_FROM_EMAIL, // reuse sender
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text || options.html.replace(/<[^>]*>/g, ''),
+        attachments: options.attachments?.map(a => ({
+          filename: a.filename,
+          content: a.data,
+          contentType: a.contentType,
+        })),
+      });
+      logger.info('Email sent via Nodemailer:', { to: options.to, subject: options.subject });
+    } catch (error) {
+      logger.error('Failed to send email via Nodemailer:', { to: options.to, subject: options.subject, error });
+      throw error;
+    }
+  } else {
+    try {
+      const messageData = {
+        from: process.env.MAILGUN_FROM_EMAIL!,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text || options.html.replace(/<[^>]*>/g, ''),
+        attachment: options.attachments
+      };
+      const result = await mg.messages.create(process.env.MAILGUN_DOMAIN!, messageData);
+      logger.info('Email sent successfully:', {
+        to: options.to,
+        subject: options.subject,
+        messageId: result.id
+      });
+    } catch (error) {
+      logger.error('Failed to send email:', {
+        to: options.to,
+        subject: options.subject,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 };
 
