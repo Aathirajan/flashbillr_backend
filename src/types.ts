@@ -11,8 +11,7 @@ export interface InvoiceItem {
   name: string;
   quantity: number;
   unitPrice: number;
-  gstRate: number;
-  gstAmount: number;
+  
   totalAmount: number;
 }
 
@@ -29,7 +28,7 @@ export interface InvoiceData {
   customerEmail?: string;
   items: InvoiceItem[];
   subtotal: number;
-  totalGst: number;
+
   total: number;
   totalInWords: string;
   paymentMethod: string;

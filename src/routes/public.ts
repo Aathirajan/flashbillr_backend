@@ -333,18 +333,8 @@ router.get('/store/:slug/products', async (req: any, res: any, next: any) => {
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: {
-          images: {
-            orderBy: { createdAt: 'asc' }
-          },
-          inventory: {
-            select: {
-              currentStock: true
-            }
-          }
-        },
         orderBy: [
-          { category: 'asc' },
+          { categoryId: 'asc' },
           { name: 'asc' }
         ],
         skip,
@@ -358,13 +348,14 @@ router.get('/store/:slug/products', async (req: any, res: any, next: any) => {
       id: product.id,
       name: product.name,
       description: product.description,
-      category: product.category,
+      categoryId: product.categoryId,
       brand: product.brand,
+      sku: product.sku,
       mrp: product.mrp,
       sellingPrice: product.sellingPrice,
       youtubeUrl: product.youtubeUrl,
-      images: product.images.map((img: any) => img.url),
-      inStock: (product.inventory[0]?.currentStock || 0) > 0
+      inStock: product.currentStock && product.currentStock > 0,
+      currentStock: product.currentStock || 0
     }));
 
     res.json({
@@ -440,9 +431,9 @@ router.get('/store/:slug/categories', async (req: any, res: any, next: any) => {
         deletedAt: null, 
         isActive: true 
       },
-      select: { category: true },
-      distinct: ['category'],
-      orderBy: { category: 'asc' }
+      select: { categoryId: true },
+      distinct: ['categoryId'],
+      orderBy: { categoryId: 'asc' }
     });
 
     res.json({
@@ -559,15 +550,10 @@ router.get('/store/:slug/products/:productId', async (req: any, res: any, next: 
         isActive: true
       },
       include: {
-        images: {
-          orderBy: { createdAt: 'asc' }
-        },
         inventory: {
-          select: {
-            currentStock: true
-          }
-        }
-      }
+          select: { currentStock: true },
+        },
+      },
     });
 
     if (!product) {
@@ -579,15 +565,14 @@ router.get('/store/:slug/products/:productId', async (req: any, res: any, next: 
       id: product.id,
       name: product.name,
       description: product.description,
-      category: product.category,
+      categoryId: product.categoryId,
       brand: product.brand,
       sku: product.sku,
       mrp: product.mrp,
       sellingPrice: product.sellingPrice,
       youtubeUrl: product.youtubeUrl,
-      images: product.images.map((img: any) => img.url),
-      inStock: (product.inventory[0]?.currentStock || 0) > 0,
-      currentStock: product.inventory[0]?.currentStock || 0
+      inStock: (product.inventory && product.inventory[0]?.currentStock > 0) || false,
+      currentStock: product.inventory && product.inventory[0]?.currentStock || 0
     };
 
     res.json({ product: formattedProduct });

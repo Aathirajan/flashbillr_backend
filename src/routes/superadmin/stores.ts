@@ -613,7 +613,7 @@ router.post('/:id/price-list', async (req, res, next) => {
       include: {
         products: {
           where: { deletedAt: null, isActive: true },
-          orderBy: [{ category: 'asc' }, { name: 'asc' }]
+          orderBy: [{ categoryId: 'asc' }, { name: 'asc' }]
         }
       }
     });
@@ -624,7 +624,7 @@ router.post('/:id/price-list', async (req, res, next) => {
     }
 
     // Group products by category
-    const categories = store.products.reduce((acc: any, product: any) => {
+    const categories = (store.products || []).reduce((acc: any, product: any) => {
       const category = acc.find((cat: any) => cat.name === product.category);
       if (category) {
         category.products.push({

@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import sharp from 'sharp';
 import { prisma } from '../../utils/database';
 import { validate } from '../../middleware/validation';
 import { createProductSchema, updateProductSchema } from '../../utils/validation';
@@ -59,8 +60,7 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
       prisma.product.findMany({
         where,
         include: {
-          images: { orderBy: { createdAt: 'asc' } },
-          inventory: { select: { currentStock: true, minStockLevel: true } }
+          inventory: true
         },
         orderBy: { [sortBy]: sortOrder },
         skip,
@@ -74,7 +74,8 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
         ...product,
         currentStock: product.inventory[0]?.currentStock || 0,
         minStockLevel: product.inventory[0]?.minStockLevel || 10,
-        isLowStock: (product.inventory[0]?.currentStock || 0) <= (product.inventory[0]?.minStockLevel || 10)
+        isLowStock: (product.inventory[0]?.currentStock || 0) <= (product.inventory[0]?.minStockLevel || 10),
+        images: product.images || []
       })),
       pagination: {
         page: Number(page),
@@ -154,15 +155,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
     const product = await prisma.product.findFirst({
       where: { id, storeId, deletedAt: null },
       include: {
-        images: { orderBy: { createdAt: 'asc' } },
-        inventory: {
-          select: {
-            currentStock: true,
-            minStockLevel: true,
-            maxStockLevel: true,
-            lastRestocked: true
-          }
-        }
+        inventory: true
       }
     });
 
@@ -185,10 +178,16 @@ router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
 // -----------------------------------
 // POST Create Product
 // -----------------------------------
-router.post('/', upload.array('images', 5), validateProductImages(true), validate(createProductSchema), async (req: AuthenticatedRequest, res, next) => {
+router.post('/', upload.fields([{ name: 'images', maxCount: 5 }, { name: 'images[]', maxCount: 5 }]), validateProductImages(true), validate(createProductSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
-    const productData = { ...req.body, storeId };
+    // Ensure mrp and sellingPrice are numbers, not strings
+    const productData = {
+      ...req.body,
+      storeId,
+      mrp: req.body.mrp !== undefined ? Number(req.body.mrp) : undefined,
+      sellingPrice: req.body.sellingPrice !== undefined ? Number(req.body.sellingPrice) : undefined
+    };
 
     const existingProduct = await prisma.product.findFirst({
       where: { sku: productData.sku, storeId, deletedAt: null }
@@ -196,27 +195,36 @@ router.post('/', upload.array('images', 5), validateProductImages(true), validat
 
     if (existingProduct) throw createError('Product with this SKU already exists', 409);
 
-    // Create product first
-    const product = await prisma.product.create({
-      data: productData,
-      include: { images: true }
-    });
-
-    // Process uploaded images
-    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
-      for (const file of req.files as Express.Multer.File[]) {
-        // Use a descriptive file name and folder structure
-        const fileName = `${product.id}-${Date.now()}-${file.originalname}`;
-        const folder = `stores/${storeId}/products/${product.id}`;
-        const url = await uploadFile(file.buffer, fileName, file.mimetype, folder);
-        await prisma.productImage.create({
-          data: {
-            url,
-            productId: product.id
-          }
-        });
+    let imageUrls: string[] = [];
+    const files: Express.Multer.File[] = [];
+    if (req.files) {
+      if (Array.isArray(req.files)) {
+        files.push(...req.files);
+      } else {
+        Object.values(req.files).forEach(fileArr => files.push(...fileArr));
       }
     }
+    if (files.length > 0) {
+      for (const file of files) {
+        // Process image: resize to max 1024px width, convert to JPEG, quality 80
+        const processedBuffer = await sharp(file.buffer)
+          .resize({ width: 1024, withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+        const fileName = `${Date.now()}-${file.originalname.replace(/\.[^/.]+$/, '')}.jpg`;
+        const folder = `stores/${storeId}/products`;
+        const url = await uploadFile(processedBuffer, fileName, 'image/jpeg', folder);
+        imageUrls.push(url);
+      }
+    }
+
+    // Create product with images
+    const product = await prisma.product.create({
+      data: {
+        ...productData,
+        images: imageUrls
+      }
+    });
 
     await prisma.inventory.create({
       data: {
@@ -230,13 +238,7 @@ router.post('/', upload.array('images', 5), validateProductImages(true), validat
 
     logger.info('Product created successfully:', { productId: product.id, productName: product.name, storeId });
 
-    // Fetch product with images
-    const productWithImages = await prisma.product.findUnique({
-      where: { id: product.id },
-      include: { images: { orderBy: { createdAt: 'asc' } } }
-    });
-
-    res.status(201).json({ product: productWithImages });
+    res.status(201).json({ product });
   } catch (error) {
     next(error);
   }
@@ -265,37 +267,49 @@ router.put('/:id', upload.array('images', 5), validateProductImages(false), vali
       if (skuExists) throw createError('Product with this SKU already exists', 409);
     }
 
-    // Update product fields
-    const product = await prisma.product.update({
-      where: { id },
-      data: updateData,
-      include: { images: { orderBy: { createdAt: 'asc' } } }
-    });
-
-    // Process new uploaded images
-    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
-      for (const file of req.files as Express.Multer.File[]) {
-        const fileName = `${product.id}-${Date.now()}-${file.originalname}`;
-        const folder = `stores/${storeId}/products/${product.id}`;
-        const url = await uploadFile(file.buffer, fileName, file.mimetype, folder);
-        await prisma.productImage.create({
-          data: {
-            url,
-            productId: product.id
-          }
-        });
+    // Always delete all existing images from cloud
+    const currentImages: string[] = Array.isArray(existingProduct.images) ? existingProduct.images : [];
+    const { deleteFile } = await import('../../services/firebase');
+    for (const url of currentImages) {
+      const match = url.match(/https:\/\/storage.googleapis.com\/(.+)/);
+      if (match) {
+        const filePath = match[1];
+        try {
+          await deleteFile(filePath);
+        } catch (err) {
+          logger.error('Failed to delete image from cloud:', { url, error: err instanceof Error ? err.message : err });
+        }
       }
     }
+    // Add new uploads
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const file of req.files as Express.Multer.File[]) {
+        const processedBuffer = await sharp(file.buffer)
+          .resize({ width: 1024, withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+        const fileName = `${Date.now()}-${file.originalname.replace(/\.[^/.]+$/, '')}.jpg`;
+        const folder = `stores/${storeId}/products`;
+        const url = await uploadFile(processedBuffer, fileName, 'image/jpeg', folder);
+        imageUrls.push(url);
+      }
+    }
+    // If no files uploaded, images will be empty array
 
-    // Fetch updated product with images
-    const productWithImages = await prisma.product.findUnique({
-      where: { id: product.id },
-      include: { images: { orderBy: { createdAt: 'asc' } } }
+    // Remove forbidden fields before updating
+    delete updateData.currentStock;
+    delete updateData.images;
+
+    // Update product fields including images
+    const product = await prisma.product.update({
+      where: { id },
+      data: { ...updateData, images: imageUrls }
     });
 
     logger.info('Product updated successfully:', { productId: product.id, productName: product.name });
 
-    res.json({ product: productWithImages });
+    res.json({ product });
   } catch (error) {
     next(error);
   }

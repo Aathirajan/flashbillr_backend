@@ -4,7 +4,7 @@ import Joi from 'joi';
 export const emailSchema = Joi.string().email().required();
 export const passwordSchema = Joi.string().min(8).required();
 export const phoneSchema = Joi.string().pattern(/^[6-9]\d{9}$/).required();
-export const gstSchema = Joi.string().pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/);
+
 
 // --- Auth Validation ---
 export const loginSchema = Joi.object({
@@ -34,7 +34,7 @@ export const createStoreSchema = Joi.object({
   whatsapp: Joi.string().allow('', null).optional(),
   address: Joi.string().max(500).allow('', null).optional(),
   ownerName: Joi.string().max(100).allow('', null).optional(),
-  gstNumber: gstSchema.allow('', null).optional(),
+
   license: Joi.string().allow('', null).optional(),
   certification: Joi.string().allow('', null).optional(),
   establishedYear: Joi.number().integer().allow(null).optional(),
@@ -85,7 +85,11 @@ export const createProductSchema = Joi.object({
 
 export const updateProductSchema = createProductSchema.fork(
   Object.keys(createProductSchema.describe().keys),
-  (schema) => schema.optional()
+  ((schema: Joi.Schema, key: string, parent?: any) => {
+    if (key === 'currentStock') return schema.forbidden();
+    if (key === 'images') return schema.forbidden();
+    return schema.optional();
+  }) as Joi.SchemaFunction
 );
 
 
@@ -125,8 +129,7 @@ export const createPOSReceiptSchema = Joi.object({
       productId: Joi.string().required(),
       productName: Joi.string().required(),
       quantity: Joi.number().integer().positive().required(),
-      unitPrice: Joi.number().positive().required(),
-      gstRate: Joi.number().min(0).max(28).required()
+      unitPrice: Joi.number().positive().required()
     })
   ).min(1).required(),
   paymentMethod: Joi.string().valid('CASH', 'CARD', 'UPI').default('CASH'),

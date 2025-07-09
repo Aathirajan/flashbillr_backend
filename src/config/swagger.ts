@@ -57,7 +57,7 @@ const options: swaggerJsdoc.Options = {
           },
           required: ['error']
         },
-        
+
         // Pagination schema
         Pagination: {
           type: 'object',
@@ -278,7 +278,7 @@ const options: swaggerJsdoc.Options = {
               description: 'Product creation timestamp'
             }
           },
-          required: ['id', 'name', 'category', 'sku', 'mrp', 'sellingPrice', 'gstRate', 'isActive', 'createdAt']
+          required: ['id', 'name', 'category', 'sku', 'mrp', 'sellingPrice', 'isActive', 'createdAt']
         },
 
         ProductImage: {
@@ -386,7 +386,7 @@ const options: swaggerJsdoc.Options = {
             },
             status: {
               type: 'string',
-              enum: ['PAID', 'PACKED', 'SHIPPED', 'DELIVERED', 'CANCELLED'],
+              enum: ['AWAITING_PAYMENT', 'PAID', 'PACKED', 'SHIPPED', 'COMPLETED', 'CANCELLED'],
               description: 'Order status'
             },
             subtotal: {
@@ -493,7 +493,7 @@ const options: swaggerJsdoc.Options = {
               required: ['name', 'sku']
             }
           },
-          required: ['id', 'quantity', 'unitPrice', 'gstRate', 'gstAmount', 'totalAmount']
+          required: ['id', 'quantity', 'unitPrice', 'gstAmount', 'totalAmount']
         },
 
         // POS Receipt schemas
@@ -539,10 +539,6 @@ const options: swaggerJsdoc.Options = {
                     type: 'number',
                     description: 'Unit price'
                   },
-                  gstRate: {
-                    type: 'number',
-                    description: 'GST rate'
-                  },
                   gstAmount: {
                     type: 'number',
                     description: 'GST amount'
@@ -552,7 +548,7 @@ const options: swaggerJsdoc.Options = {
                     description: 'Total amount'
                   }
                 },
-                required: ['productId', 'productName', 'quantity', 'unitPrice', 'gstRate', 'gstAmount', 'totalAmount']
+                required: ['productId', 'productName', 'quantity', 'unitPrice', 'gstAmount', 'totalAmount']
               },
               description: 'Receipt items'
             },
@@ -701,6 +697,6 @@ const options: swaggerJsdoc.Options = {
     './dist/routes/storeadmin/*.js',
     './dist/routes/superadmin/*.js'
   ]
-};
+}
 
 export const specs = swaggerJsdoc(options);

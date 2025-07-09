@@ -9,6 +9,7 @@ import posRoutes from './pos';
 import invoicesRoutes from './invoices';
 import notificationsRoutes from './notifications';
 import meRoutes from './me';
+import categoriesRoutes from './categories';
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ router.use('/pos', posRoutes);
 router.use('/invoices', invoicesRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/me', meRoutes);
+router.use('/categories', categoriesRoutes);
 
 router.use('/support-tickets', require('./supportTickets').default);
 

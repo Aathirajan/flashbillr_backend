@@ -398,7 +398,7 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
       }
 
       const itemTotal = item.quantity * item.unitPrice;
-      const gstAmount = (itemTotal * item.gstRate) / 100;
+      const gstAmount = 0; // gstRate removed
       const itemTotalWithGST = itemTotal + gstAmount;
 
       subtotal += itemTotal;
@@ -409,7 +409,7 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
         productName: product.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        gstRate: item.gstRate,
+        
         gstAmount,
         totalAmount: itemTotalWithGST
       });
@@ -447,7 +447,7 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
         customerPhone,
         items: validatedItems,
         subtotal,
-        gstAmount: totalGST,
+
         totalAmount,
         amountReceived,
         paymentMethod
@@ -472,7 +472,7 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
       storeAddress: store.address ?? undefined,
       storePhone: store.phone ?? undefined,
       storeEmail: store.email ?? undefined,
-      storeGST: store.gstNumber ?? undefined,
+      // storeGST: store.gstNumber ?? undefined,
       brandColor: store.brandColor,
       customerName: customerName || 'Walk-in Customer',
       customerPhone,

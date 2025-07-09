@@ -126,11 +126,9 @@ router.post(
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: product.sellingPrice,
-          gstRate: product.gstRate,
-          gstAmount: (product.gstRate / 100) * itemTotal,
           totalAmount: itemTotal,
         });
-        gstAmount += (product.gstRate / 100) * itemTotal;
+        // gstRate removed, no gstAmount increment
         totalAmount += itemTotal;
       }
 
@@ -164,7 +162,6 @@ router.post(
           storeId: items[0] ? (await prisma.product.findUnique({ where: { id: items[0].productId } }))!.storeId : '',
           status: 'PAID',
           subtotal,
-          gstAmount,
           totalAmount,
           paymentMethod: paymentMethod || 'CASH',
           paymentScreenshotUrl: paymentScreenshotUrl || null,

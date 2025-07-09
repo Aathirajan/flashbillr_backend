@@ -17,7 +17,7 @@ interface InvoiceItem {
   name: string;
   quantity: number;
   unitPrice: number;
-  gstRate: number;
+  
   gstAmount: number;
   totalAmount: number;
 }
@@ -35,7 +35,7 @@ interface OrderItem {
   productId: string;
   quantity: number;
   unitPrice: number;
-  gstRate: number;
+  
   gstAmount: number;
   totalAmount: number;
 }
@@ -78,7 +78,7 @@ const upload = multer({
  *         name: status
  *         schema:
  *           type: string
- *           enum: [pending, processing, shipped, delivered, cancelled]
+ *           enum: ['AWAITING_PAYMENT', 'PAID', 'PACKED', 'SHIPPED', 'COMPLETED', 'CANCELLED']
  *         description: Filter by order status
  *       - in: query
  *         name: page
@@ -130,7 +130,7 @@ const upload = multer({
  *                         description: Order number
  *                       status:
  *                         type: string
- *                         enum: [pending, processing, shipped, delivered, cancelled]
+ *                         enum: ['AWAITING_PAYMENT', 'PAID', 'PACKED', 'SHIPPED', 'COMPLETED', 'CANCELLED']
  *                         description: Current order status
  *                       createdAt:
  *                         type: string
@@ -317,7 +317,7 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
  *                       description: Order number
  *                     status:
  *                       type: string
- *                       enum: [pending, processing, shipped, delivered, cancelled]
+ *                       enum: ['AWAITING_PAYMENT', 'PAID', 'PACKED', 'SHIPPED', 'COMPLETED', 'CANCELLED']
  *                       description: Current order status
  *                     createdAt:
  *                       type: string
@@ -488,7 +488,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
  *                       description: Order number
  *                     status:
  *                       type: string
- *                       enum: [pending, processing, shipped, delivered, cancelled]
+ *                       enum: ['AWAITING_PAYMENT', 'PAID', 'PACKED', 'SHIPPED', 'COMPLETED', 'CANCELLED']
  *                       description: Current order status
  *                     createdAt:
  *                       type: string
@@ -554,7 +554,7 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
       }
 
       const itemTotal = item.quantity * product.sellingPrice;
-      const gstAmount = (itemTotal * product.gstRate) / 100;
+      const gstAmount = 0; // gstRate removed
       const itemTotalWithGST = itemTotal + gstAmount;
 
       subtotal += itemTotal;
@@ -564,7 +564,7 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: product.sellingPrice,
-        gstRate: product.gstRate,
+
         gstAmount,
         totalAmount: itemTotalWithGST
       });
@@ -591,7 +591,7 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
           totalAmount,
           paymentMethod,
           notes,
-          status: 'PAID'
+          status: 'AWAITING_PAYMENT'
         }
       });
 
@@ -631,7 +631,6 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
         customerId: true,
         storeId: true,
         subtotal: true,
-        gstAmount: true,
         totalAmount: true,
         paymentMethod: true,
         notes: true,
@@ -668,7 +667,6 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
             address: true,
             phone: true,
             email: true,
-            gstNumber: true,
             brandColor: true
           }
         }
@@ -682,7 +680,6 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
     const completeOrder = {
       ...orderData,
       subtotal: String(orderData.subtotal),
-      gstAmount: String(orderData.gstAmount),
       totalAmount: String(orderData.totalAmount),
       orderItems: orderData.orderItems
     };
@@ -703,12 +700,9 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
         name: item.product.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        gstRate: 0,
-        gstAmount: 0,
         totalAmount: item.totalAmount
       })) as InvoiceItem[],
       subtotal: orderData.subtotal,
-      totalGst: orderData.gstAmount,
       total: orderData.totalAmount,
       totalInWords: convertNumberToWords(orderData.totalAmount),
       paymentMethod: orderData.paymentMethod
@@ -722,7 +716,7 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
       storeAddress: invoiceData.storeAddress,
       storePhone: invoiceData.storePhone,
       storeEmail: invoiceData.storeEmail,
-      storeGST: store.gstNumber ?? undefined,
+      // storeGST: store.gstNumber ?? undefined, // gstNumber removed  
       brandColor: store.brandColor,
       customerName: invoiceData.customerName,
       customerPhone: invoiceData.customerPhone,
@@ -751,7 +745,6 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
         storeId,
         customerId,
         subtotal: orderData.subtotal,
-        gstAmount: orderData.gstAmount,
         totalAmount: orderData.totalAmount,
         pdfUrl
       }
@@ -766,7 +759,7 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
           store.name,
           {
             totalAmount,
-            status: 'PAID'
+            status: 'AWAITING_PAYMENT'
           }
         );
       } catch (emailError) {
@@ -811,7 +804,7 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, processing, shipped, delivered, cancelled]
+ *                 enum: ['AWAITING_PAYMENT', 'PAID', 'PACKED', 'SHIPPED', 'COMPLETED', 'CANCELLED']
  *                 description: New order status
  *               notes:
  *                 type: string
@@ -838,33 +831,49 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
  *                       format: date-time
  *                       description: Status update timestamp
  */
+import { OrderStatus, ORDER_STATUS_FLOW } from '../../types/order';
+
 router.patch('/:id/status', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
     const storeId = req.user!.storeId!;
 
-    if (!['PAID', 'PACKED', 'SHIPPED', 'DELIVERED', 'CANCELLED'].includes(status)) {
+    // Validate status
+    const validStatuses = [...ORDER_STATUS_FLOW, OrderStatus.CANCELLED];
+    if (!validStatuses.includes(status)) {
       throw createError('Invalid order status', 400);
     }
 
     const order = await prisma.order.findFirst({
       where: { id, storeId, deletedAt: null },
-      include: {
-        customer: true
-      }
+      include: { customer: true }
     });
 
     if (!order) {
       throw createError('Order not found', 404);
     }
 
-    const updateData: any = { status };
+    // Only allow forward movement in status flow, or cancellation
+    if (status !== OrderStatus.CANCELLED) {
+      const currentIdx = ORDER_STATUS_FLOW.indexOf(order.status as OrderStatus);
+      const nextIdx = ORDER_STATUS_FLOW.indexOf(status as OrderStatus);
+      if (nextIdx === -1 || nextIdx !== currentIdx + 1) {
+        throw createError('Invalid status progression', 400);
+      }
+    } else {
+      // Optionally: disallow cancelling after SHIPPED/COMPLETED
+      const nonCancellable = [OrderStatus.SHIPPED, OrderStatus.COMPLETED];
+      if (nonCancellable.includes(order.status as OrderStatus)) {
+        throw createError('Cannot cancel order in current status', 400);
+      }
+    }
 
-    if (status === 'SHIPPED') {
+    const updateData: any = { status };
+    if (status === OrderStatus.SHIPPED) {
       updateData.shippedAt = new Date();
-    } else if (status === 'DELIVERED') {
-      updateData.deliveredAt = new Date();
+    } else if (status === OrderStatus.COMPLETED) {
+      updateData.completedAt = new Date();
     }
 
     const updatedOrder = await prisma.order.update({
@@ -1006,7 +1015,7 @@ router.post('/:id/ship', upload.single('lrPhoto'), async (req: AuthenticatedRequ
       lrPhotoUrl
     });
 
-    res.json({ 
+    res.json({
       order: updatedOrder,
       message: 'Order marked as shipped successfully'
     });
