@@ -81,6 +81,57 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
   }
 };
 
+// Send customer email verification (public customer registration)
+import { prisma } from '../utils/database';
+
+export const sendCustomerVerificationEmail = async (
+  email: string,
+  verificationToken: string,
+  firstName?: string,
+  storeId?: string,
+  type: 'verify' | 'reset' = 'verify'
+): Promise<void> => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const store = storeId ? await prisma.store.findUnique({ where: { id: storeId } }) : null;
+  const storeName = store?.name || 'Flashbillr';
+  const brandColor = store?.brandColor || '#0d6efd';
+  const logoUrl = store?.logo || `${frontendUrl}/logo.png`;
+  const actionUrl = type === 'verify'
+    ? `${frontendUrl}/verify-customer-email?token=${verificationToken}`
+    : `${frontendUrl}/reset-customer-password?token=${verificationToken}`;
+  const subject = type === 'verify'
+    ? `Verify your email for ${storeName}`
+    : `Reset your password for ${storeName}`;
+  const actionText = type === 'verify' ? 'Verify Email' : 'Reset Password';
+  const introText = type === 'verify'
+    ? `Thank you for registering! Please verify your email by clicking the button below:`
+    : `You requested to reset your password. Click the button below to set a new password:`;
+  const html = `
+  <div style="font-family: Arial, sans-serif; background: #f7f7f7; padding: 24px;">
+    <div style="max-width: 480px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; overflow: hidden;">
+      <div style="background: ${brandColor}; padding: 24px; text-align: center;">
+        <img src="${logoUrl}" alt="${storeName} Logo" style="max-height: 48px; margin-bottom: 12px;">
+        <h2 style="color: #fff; margin: 0;">${storeName}</h2>
+      </div>
+      <div style="padding: 32px 24px 24px 24px; text-align: center;">
+        <p style="font-size: 1.1em; color: #333;">Hi${firstName ? ' ' + firstName : ''},</p>
+        <p style="color: #444;">${introText}</p>
+        <a href="${actionUrl}" style="display: inline-block; margin: 24px 0 16px 0; padding: 12px 32px; background: ${brandColor}; color: #fff; border-radius: 4px; font-size: 1.1em; text-decoration: none; font-weight: bold;">${actionText}</a>
+        <p style="color: #888; font-size: 0.95em; margin-top: 24px;">If you did not request this, you can safely ignore this email.</p>
+      </div>
+      <div style="background: #f1f1f1; padding: 16px; font-size: 0.9em; color: #999; text-align: center;">
+        &copy; ${new Date().getFullYear()} ${storeName}
+      </div>
+    </div>
+  </div>
+  `;
+  await sendEmail({
+    to: email,
+    subject,
+    html,
+  });
+};
+
 // Email templates
 export const sendStoreAdminOnboardingEmail = async (
   email: string,

@@ -58,7 +58,86 @@ router.post(
   upload.single('paymentScreenshot'),
   // Validation middleware
   [
-    // For multipart, validation will be manual below
+    (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
+      const Joi = require('joi');
+      // Address schema (matches Prisma Address model)
+      const addressSchema = Joi.object({
+        name: Joi.string().allow('', null),
+        line1: Joi.string().required(),
+        line2: Joi.string().allow('', null),
+        city: Joi.string().required(),
+        state: Joi.string().required(),
+        zip: Joi.string().required(),
+        country: Joi.string().required(),
+        phone: Joi.string().allow('', null)
+      });
+      // Order item schema (matches Prisma OrderItem model)
+      const orderItemSchema = Joi.object({
+        productId: Joi.string().required(),
+        quantity: Joi.number().integer().min(1).required()
+      });
+      // Main schema
+      const schema = Joi.object({
+        items: Joi.string().required(), // Will be parsed and validated below
+        paymentMethod: Joi.string().required(),
+        guestName: Joi.string().when(Joi.object({ userId: Joi.exist() }).unknown(), {
+          then: Joi.optional(),
+          otherwise: Joi.required()
+        }),
+        guestEmail: Joi.string().email().when(Joi.object({ userId: Joi.exist() }).unknown(), {
+          then: Joi.optional(),
+          otherwise: Joi.required()
+        }),
+        guestPhone: Joi.string().pattern(/^[0-9]{10,15}$/).when(Joi.object({ userId: Joi.exist() }).unknown(), {
+          then: Joi.optional(),
+          otherwise: Joi.required()
+        }),
+        address: Joi.string().when(Joi.object({ userId: Joi.exist() }).unknown(), {
+          then: Joi.optional(),
+          otherwise: Joi.required()
+        }),
+        addressId: Joi.string().when(Joi.object({ userId: Joi.exist() }).unknown(), {
+          then: Joi.required(),
+          otherwise: Joi.optional()
+        }),
+        paymentScreenshot: Joi.any()
+      });
+      // Validate the base fields
+      const { error } = schema.validate(req.body, { abortEarly: false });
+      if (error) {
+        return res.status(400).json({ error: error.details.map((d: import('joi').ValidationErrorItem) => d.message).join(', ') });
+      }
+      // Parse and validate items
+      let items;
+      try {
+        items = JSON.parse(req.body.items);
+      } catch {
+        return res.status(400).json({ error: 'Invalid items format (must be JSON array)' });
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'At least one item is required' });
+      }
+      for (const item of items) {
+        const { error: itemErr } = orderItemSchema.validate(item);
+        if (itemErr) {
+          return res.status(400).json({ error: `Invalid item: ${itemErr.details.map((d: import('joi').ValidationErrorItem) => d.message).join(', ')}` });
+        }
+      }
+      // Parse and validate address if provided
+      if (req.body.address) {
+        let addressObj;
+        try {
+          addressObj = JSON.parse(req.body.address);
+        } catch {
+          return res.status(400).json({ error: 'Invalid address format (must be JSON object)' });
+        }
+        const { error: addrErr } = addressSchema.validate(addressObj);
+        if (addrErr) {
+          return res.status(400).json({ error: `Invalid address: ${addrErr.details.map((d: import('joi').ValidationErrorItem) => d.message).join(', ')}` });
+        }
+      }
+      return next();
+    }
   ],
   async (req: AuthenticatedRequest, res: any, next: any) => {
     try {
@@ -104,11 +183,48 @@ router.post(
         if (!guestName || !guestEmail || !guestPhone || !address) {
           return res.status(400).json({ error: 'Guest name, email, phone, and address required' });
         }
+        // Find or create customer for this guest (by email/phone and storeId)
+        let customer = await prisma.customer.findFirst({
+          where: {
+            storeId: items[0] ? (await prisma.product.findUnique({ where: { id: items[0].productId } }))!.storeId : '',
+            OR: [
+              { email: guestEmail },
+              { phone: guestPhone }
+            ]
+          }
+        });
+        if (!customer) {
+          // Try to split guestName into firstName/lastName
+          let firstName = guestName;
+          let lastName = '';
+          if (guestName && guestName.includes(' ')) {
+            const parts = guestName.split(' ');
+            firstName = parts[0];
+            lastName = parts.slice(1).join(' ');
+          }
+          customer = await prisma.customer.create({
+            data: {
+              firstName,
+              lastName,
+              email: guestEmail,
+              phone: guestPhone,
+              address: address.line1,
+              city: address.city,
+              state: address.state,
+              pincode: address.zip,
+              storeId: items[0] ? (await prisma.product.findUnique({ where: { id: items[0].productId } }))!.storeId : '',
+              notes: 'Guest order auto-created',
+              isGuest: true,
+            }
+          });
+        }
         // Create address for guest (no userId)
         createdAddress = await prisma.address.create({
           data: { ...address, userId: null, name: 'Guest Address' },
         });
         orderAddressId = createdAddress.id;
+        // Attach customerId for use in order creation
+        req.body._customerId = customer.id;
       }
 
       // Calculate order totals (you may want to refactor this for discounts, taxes, etc.)
@@ -165,6 +281,7 @@ router.post(
           totalAmount,
           paymentMethod: paymentMethod || 'CASH',
           paymentScreenshotUrl: paymentScreenshotUrl || null,
+          customerId: userId ? undefined : req.body._customerId, // Only for guest orders
           orderItems: {
             create: orderItems,
           },
