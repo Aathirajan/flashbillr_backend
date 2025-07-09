@@ -72,12 +72,14 @@ export const updateStoreSchema = createStoreSchema.fork(
 export const createProductSchema = Joi.object({
   name: Joi.string().min(2).max(200).required(),
   description: Joi.string().max(1000).optional(),
-  category: Joi.string().min(2).max(100).required(),
+  categoryId: Joi.string().required(), // should match a valid UUID or CUID
   brand: Joi.string().max(100).optional(),
   sku: Joi.string().min(2).max(50).required(),
   mrp: Joi.number().positive().required(),
   sellingPrice: Joi.number().positive().required(),
-  gstRate: Joi.number().min(0).max(28).default(18),
+  contentType: Joi.string()
+    .valid('BOX', 'PIECE', 'PACKET')
+    .required(),
   youtubeUrl: Joi.string().uri().optional()
 });
 
@@ -85,6 +87,7 @@ export const updateProductSchema = createProductSchema.fork(
   Object.keys(createProductSchema.describe().keys),
   (schema) => schema.optional()
 );
+
 
 // --- Customer Validation ---
 export const createCustomerSchema = Joi.object({

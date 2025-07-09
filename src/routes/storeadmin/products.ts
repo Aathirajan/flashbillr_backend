@@ -7,155 +7,49 @@ import { createError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { AuthenticatedRequest } from '../../middleware/auth';
 import { uploadFile } from '../../services/firebase';
+import { validateProductImages } from '../../middleware/validateProductImages';
 
 const router = express.Router();
 
-// Configure multer for image uploads
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 5 // Maximum 5 files
+    fileSize: 5 * 1024 * 1024,
+    files: 5
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
-    }
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/products:
- *   get:
- *     tags: [Store Admin]
- *     summary: Get all products for store
- *     description: Retrieve all products with filtering, search, and pagination
- *     parameters:
- *       - in: query
- *         name: category
- *         schema:
- *           type: string
- *         description: Filter products by category
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search products by name, SKU, or brand (case-insensitive)
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 20
- *         description: Number of items per page
- *     responses:
- *       200:
- *         description: List of products retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 products:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Product ID
- *                       name:
- *                         type: string
- *                         description: Product name
- *                       sku:
- *                         type: string
- *                         description: Stock Keeping Unit
- *                       brand:
- *                         type: string
- *                         description: Product brand
- *                       category:
- *                         type: string
- *                         description: Product category
- *                       description:
- *                         type: string
- *                         description: Product description
- *                       price:
- *                         type: number
- *                         description: Product price
- *                       gstRate:
- *                         type: number
- *                         description: GST rate
- *                       images:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             id:
- *                               type: string
- *                             url:
- *                               type: string
- *                               format: uri
- *                             createdAt:
- *                               type: string
- *                               format: date-time
- *                       currentStock:
- *                         type: integer
- *                         description: Current stock quantity
- *                       minStockLevel:
- *                         type: integer
- *                         description: Minimum stock level
- *                       isLowStock:
- *                         type: boolean
- *                         description: Indicates if stock is below minimum level
- *                       createdAt:
- *                         type: string
- *                         format: date-time
- *                       updatedAt:
- *                         type: string
- *                         format: date-time
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                       description: Current page number
- *                     limit:
- *                       type: integer
- *                       description: Number of items per page
- *                     total:
- *                       type: integer
- *                       description: Total number of products
- *                     pages:
- *                       type: integer
- *                       description: Total number of pages
- */
+// -----------------------------------
+// GET /products?search=&categoryId=&sortBy=&sortOrder=&page=&limit=
+// -----------------------------------
 router.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
-    const { category, search, page = 1, limit = 20 } = req.query;
+    const {
+      search,
+      categoryId,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      page = 1,
+      limit = 20
+    } = req.query as any;
 
     const where: any = {
       storeId,
       deletedAt: null
     };
 
-    if (category) {
-      where.category = category;
-    }
+    if (categoryId) where.categoryId = categoryId;
 
     if (search) {
       where.OR = [
-        { name: { contains: search as string, mode: 'insensitive' } },
-        { sku: { contains: search as string, mode: 'insensitive' } },
-        { brand: { contains: search as string, mode: 'insensitive' } }
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } }
       ];
     }
 
@@ -165,17 +59,10 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
       prisma.product.findMany({
         where,
         include: {
-          images: {
-            orderBy: { createdAt: 'asc' }
-          },
-          inventory: {
-            select: {
-              currentStock: true,
-              minStockLevel: true
-            }
-          }
+          images: { orderBy: { createdAt: 'asc' } },
+          inventory: { select: { currentStock: true, minStockLevel: true } }
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [sortBy]: sortOrder },
         skip,
         take: Number(limit)
       }),
@@ -183,7 +70,7 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
     ]);
 
     res.json({
-      products: products.map((product: any) => ({
+      products: products.map(product => ({
         ...product,
         currentStock: product.inventory[0]?.currentStock || 0,
         minStockLevel: product.inventory[0]?.minStockLevel || 10,
@@ -201,84 +88,64 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/products/{id}:
- *   get:
- *     tags: [Store Admin]
- *     summary: Get product by ID
- *     description: Retrieve a specific product by ID
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID
- *     responses:
- *       200:
- *         description: Product retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 product:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                       description: Product ID
- *                     name:
- *                       type: string
- *                       description: Product name
- *                     sku:
- *                       type: string
- *                       description: Stock Keeping Unit
- *                     brand:
- *                       type: string
- *                       description: Product brand
- *                     category:
- *                       type: string
- *                       description: Product category
- *                     description:
- *                       type: string
- *                       description: Product description
- *                     price:
- *                       type: number
- *                       description: Product price
- *                     gstRate:
- *                       type: number
- *                       description: GST rate
- *                     images:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           url:
- *                             type: string
- *                             format: uri
- *                           createdAt:
- *                             type: string
- *                             format: date-time
- *                     currentStock:
- *                       type: integer
- *                       description: Current stock quantity
- *                     minStockLevel:
- *                       type: integer
- *                       description: Minimum stock level
- *                     isLowStock:
- *                       type: boolean
- *                       description: Indicates if stock is below minimum level
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                     updatedAt:
- *                       type: string
- *                       format: date-time
- */
+// -----------------------------------
+// Bulk Upload (CSV or JSON)
+// -----------------------------------
+router.post('/bulk', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const storeId = req.user!.storeId!;
+    const products: any[] = req.body.products;
+
+    if (!Array.isArray(products) || products.length === 0) {
+      throw createError('No products provided in bulk upload', 400);
+    }
+
+    const created: string[] = [];
+    const skipped: string[] = [];
+
+    for (const item of products) {
+      const { sku } = item;
+      const existing = await prisma.product.findFirst({
+        where: { sku, storeId, deletedAt: null }
+      });
+
+      if (existing) {
+        skipped.push(sku);
+        continue;
+      }
+
+      const product = await prisma.product.create({
+        data: { ...item, storeId }
+      });
+
+      await prisma.inventory.create({
+        data: {
+          productId: product.id,
+          storeId,
+          currentStock: 0,
+          minStockLevel: 10,
+          maxStockLevel: 1000
+        }
+      });
+
+      created.push(sku);
+    }
+
+    res.json({
+      message: 'Bulk upload completed',
+      createdCount: created.length,
+      skippedCount: skipped.length,
+      created,
+      skipped
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// -----------------------------------
+// GET by ID
+// -----------------------------------
 router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { id } = req.params;
@@ -287,9 +154,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
     const product = await prisma.product.findFirst({
       where: { id, storeId, deletedAt: null },
       include: {
-        images: {
-          orderBy: { createdAt: 'asc' }
-        },
+        images: { orderBy: { createdAt: 'asc' } },
         inventory: {
           select: {
             currentStock: true,
@@ -301,9 +166,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
       }
     });
 
-    if (!product) {
-      throw createError('Product not found', 404);
-    }
+    if (!product) throw createError('Product not found', 404);
 
     res.json({
       product: {
@@ -319,140 +182,42 @@ router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/products:
- *   post:
- *     tags: [Store Admin]
- *     summary: Create new product
- *     description: Create a new product with optional images
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *                 description: Product name
- *               sku:
- *                 type: string
- *                 description: Stock Keeping Unit
- *               brand:
- *                 type: string
- *                 description: Product brand
- *               category:
- *                 type: string
- *                 description: Product category
- *               description:
- *                 type: string
- *                 description: Product description
- *               price:
- *                 type: number
- *                 description: Product price
- *               gstRate:
- *                 type: number
- *                 description: GST rate
- *               minStockLevel:
- *                 type: integer
- *                 description: Minimum stock level
- *               images:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: binary
- *                 description: Product images (maximum 5 images)
- *     responses:
- *       201:
- *         description: Product created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 product:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                       description: Product ID
- *                     name:
- *                       type: string
- *                       description: Product name
- *                     sku:
- *                       type: string
- *                       description: Stock Keeping Unit
- *                     brand:
- *                       type: string
- *                       description: Product brand
- *                     category:
- *                       type: string
- *                       description: Product category
- *                     description:
- *                       type: string
- *                       description: Product description
- *                     price:
- *                       type: number
- *                       description: Product price
- *                     gstRate:
- *                       type: number
- *                       description: GST rate
- *                     images:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           url:
- *                             type: string
- *                             format: uri
- *                           createdAt:
- *                             type: string
- *                             format: date-time
- *                     currentStock:
- *                       type: integer
- *                       description: Current stock quantity
- *                     minStockLevel:
- *                       type: integer
- *                       description: Minimum stock level
- *                     isLowStock:
- *                       type: boolean
- *                       description: Indicates if stock is below minimum level
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                     updatedAt:
- *                       type: string
- *                       format: date-time
- */
-router.post('/', upload.array('images', 5), validate(createProductSchema), async (req: AuthenticatedRequest, res, next) => {
+// -----------------------------------
+// POST Create Product
+// -----------------------------------
+router.post('/', upload.array('images', 5), validateProductImages(true), validate(createProductSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
     const productData = { ...req.body, storeId };
 
-    // Check if SKU already exists for this store
     const existingProduct = await prisma.product.findFirst({
-      where: {
-        sku: productData.sku,
-        storeId,
-        deletedAt: null
-      }
+      where: { sku: productData.sku, storeId, deletedAt: null }
     });
 
-    if (existingProduct) {
-      throw createError('Product with this SKU already exists', 409);
-    }
+    if (existingProduct) throw createError('Product with this SKU already exists', 409);
 
+    // Create product first
     const product = await prisma.product.create({
       data: productData,
-      include: {
-        images: true
-      }
+      include: { images: true }
     });
 
-    // Create initial inventory record
+    // Process uploaded images
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const file of req.files as Express.Multer.File[]) {
+        // Use a descriptive file name and folder structure
+        const fileName = `${product.id}-${Date.now()}-${file.originalname}`;
+        const folder = `stores/${storeId}/products/${product.id}`;
+        const url = await uploadFile(file.buffer, fileName, file.mimetype, folder);
+        await prisma.productImage.create({
+          data: {
+            url,
+            productId: product.id
+          }
+        });
+      }
+    }
+
     await prisma.inventory.create({
       data: {
         productId: product.id,
@@ -463,128 +228,24 @@ router.post('/', upload.array('images', 5), validate(createProductSchema), async
       }
     });
 
-    logger.info('Product created successfully:', {
-      productId: product.id,
-      productName: product.name,
-      storeId
+    logger.info('Product created successfully:', { productId: product.id, productName: product.name, storeId });
+
+    // Fetch product with images
+    const productWithImages = await prisma.product.findUnique({
+      where: { id: product.id },
+      include: { images: { orderBy: { createdAt: 'asc' } } }
     });
 
-    res.status(201).json({ product });
+    res.status(201).json({ product: productWithImages });
   } catch (error) {
     next(error);
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/products:
- *   put:
- *     tags: [Store Admin]
- *     summary: Update product
- *     description: Update an existing product's details
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *                 description: Product name
- *               sku:
- *                 type: string
- *                 description: Stock Keeping Unit
- *               brand:
- *                 type: string
- *                 description: Product brand
- *               category:
- *                 type: string
- *                 description: Product category
- *               description:
- *                 type: string
- *                 description: Product description
- *               price:
- *                 type: number
- *                 description: Product price
- *               gstRate:
- *                 type: number
- *                 description: GST rate
- *               minStockLevel:
- *                 type: integer
- *                 description: Minimum stock level
- *     responses:
- *       200:
- *         description: Product updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 product:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                       description: Product ID
- *                     name:
- *                       type: string
- *                       description: Product name
- *                     sku:
- *                       type: string
- *                       description: Stock Keeping Unit
- *                     brand:
- *                       type: string
- *                       description: Product brand
- *                     category:
- *                       type: string
- *                       description: Product category
- *                     description:
- *                       type: string
- *                       description: Product description
- *                     price:
- *                       type: number
- *                       description: Product price
- *                     gstRate:
- *                       type: number
- *                       description: GST rate
- *                     images:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           url:
- *                             type: string
- *                             format: uri
- *                           createdAt:
- *                             type: string
- *                             format: date-time
- *                     currentStock:
- *                       type: integer
- *                       description: Current stock quantity
- *                     minStockLevel:
- *                       type: integer
- *                       description: Minimum stock level
- *                     isLowStock:
- *                       type: boolean
- *                       description: Indicates if stock is below minimum level
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                     updatedAt:
- *                       type: string
- *                       format: date-time
- */
-router.put('/:id', validate(updateProductSchema), async (req: AuthenticatedRequest, res, next) => {
+// -----------------------------------
+// PUT Update Product
+// -----------------------------------
+router.put('/:id', upload.array('images', 5), validateProductImages(false), validate(updateProductSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const { id } = req.params;
     const storeId = req.user!.storeId!;
@@ -594,77 +255,55 @@ router.put('/:id', validate(updateProductSchema), async (req: AuthenticatedReque
       where: { id, storeId, deletedAt: null }
     });
 
-    if (!existingProduct) {
-      throw createError('Product not found', 404);
-    }
+    if (!existingProduct) throw createError('Product not found', 404);
 
-    // Check SKU uniqueness if being updated
     if (updateData.sku && updateData.sku !== existingProduct.sku) {
       const skuExists = await prisma.product.findFirst({
-        where: {
-          sku: updateData.sku,
-          storeId,
-          id: { not: id },
-          deletedAt: null
-        }
+        where: { sku: updateData.sku, storeId, id: { not: id }, deletedAt: null }
       });
 
-      if (skuExists) {
-        throw createError('Product with this SKU already exists', 409);
-      }
+      if (skuExists) throw createError('Product with this SKU already exists', 409);
     }
 
+    // Update product fields
     const product = await prisma.product.update({
       where: { id },
       data: updateData,
-      include: {
-        images: {
-          orderBy: { createdAt: 'asc' }
-        }
+      include: { images: { orderBy: { createdAt: 'asc' } } }
+    });
+
+    // Process new uploaded images
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      for (const file of req.files as Express.Multer.File[]) {
+        const fileName = `${product.id}-${Date.now()}-${file.originalname}`;
+        const folder = `stores/${storeId}/products/${product.id}`;
+        const url = await uploadFile(file.buffer, fileName, file.mimetype, folder);
+        await prisma.productImage.create({
+          data: {
+            url,
+            productId: product.id
+          }
+        });
       }
+    }
+
+    // Fetch updated product with images
+    const productWithImages = await prisma.product.findUnique({
+      where: { id: product.id },
+      include: { images: { orderBy: { createdAt: 'asc' } } }
     });
 
-    logger.info('Product updated successfully:', {
-      productId: product.id,
-      productName: product.name
-    });
+    logger.info('Product updated successfully:', { productId: product.id, productName: product.name });
 
-    res.json({ product });
+    res.json({ product: productWithImages });
   } catch (error) {
     next(error);
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/products:
- *   delete:
- *     tags: [Store Admin]
- *     summary: Delete product
- *     description: Soft delete a product (marks as deleted)
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID
- *     responses:
- *       200:
- *         description: Product deleted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   description: Success message
- *       404:
- *         description: Product not found
- *       403:
- *         description: Forbidden - cannot delete product from another store
- */
+// -----------------------------------
+// DELETE Product
+// -----------------------------------
 router.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { id } = req.params;
@@ -674,19 +313,14 @@ router.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
       where: { id, storeId, deletedAt: null }
     });
 
-    if (!product) {
-      throw createError('Product not found', 404);
-    }
+    if (!product) throw createError('Product not found', 404);
 
     await prisma.product.update({
       where: { id },
       data: { deletedAt: new Date() }
     });
 
-    logger.info('Product deleted successfully:', {
-      productId: id,
-      productName: product.name
-    });
+    logger.info('Product deleted successfully:', { productId: id, productName: product.name });
 
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {

@@ -91,6 +91,7 @@ model Store {
   subscriptions  Subscription[]
   bankAccounts   BankAccount[]
   supportTickets SupportTicket[]
+  Category       Category[]
 
   @@map("stores")
 }
@@ -163,24 +164,25 @@ model User {
 }
 
 model Product {
-  id           String    @id @default(cuid())
+  id           String       @id @default(cuid())
   name         String
   description  String?
-  category     String
   brand        String?
   sku          String
   mrp          Float
   sellingPrice Float
-  gstRate      Float     @default(18.0)
   youtubeUrl   String? // YouTube video URL for product demo
-  isActive     Boolean   @default(true)
+  contentType  ContentType?
+  isActive     Boolean      @default(true)
   storeId      String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  categoryId   String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   deletedAt    DateTime?
 
   // Relations
   store      Store          @relation(fields: [storeId], references: [id])
+  category   Category?      @relation(fields: [categoryId], references: [id])
   images     ProductImage[]
   inventory  Inventory[]
   orderItems OrderItem[]
@@ -220,6 +222,26 @@ model Inventory {
 
   @@unique([productId, storeId])
   @@map("inventory")
+}
+
+enum ContentType {
+  BOX
+  PIECE
+  PACKET
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  products Product[]
+  store    Store     @relation(fields: [storeId], references: [id])
+
+  @@map("categories")
 }
 
 model Customer {
@@ -314,7 +336,6 @@ model OrderItem {
   productId   String
   quantity    Int
   unitPrice   Float
-  gstRate     Float
   gstAmount   Float
   totalAmount Float
   createdAt   DateTime @default(now())
