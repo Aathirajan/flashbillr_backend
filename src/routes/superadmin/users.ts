@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Response, NextFunction } from 'express';
 import { prisma } from '../../utils/database';
 import { hashPassword, generateRandomPassword } from '../../utils/auth';
 import { sendStoreAdminOnboardingEmail } from '../../services/emailService';
@@ -75,7 +75,7 @@ const createStoreAdminSchema = Joi.object({
  *                         format: date-time
  *                         description: Last updated date
  */
-router.get('/', async (req, res, next) => {
+router.get('/', async (_, res, next) => {
   try {
     const users = await prisma.user.findMany({
       where: { deletedAt: null },

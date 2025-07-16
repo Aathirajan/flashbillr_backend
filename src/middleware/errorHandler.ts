@@ -1,17 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
-// logger removed
+import { Request, Response } from 'express';
 
 export interface AppError extends Error {
   statusCode?: number;
   isOperational?: boolean;
 }
 
-export const errorHandler = (
-  error: AppError,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const errorHandler = (error: AppError, req: Request, res: Response) => {
   const statusCode = error.statusCode || 500;
   const message = error.message || 'Internal Server Error';
 

@@ -98,7 +98,6 @@ export const generateInvoicePDF = async (data: InvoiceData): Promise<Buffer> => 
 
       // Right side header info
       const rightHeaderX = pageWidth - 200;
-      const rightHeaderY = companyY;
       
       // Draw vertical line separating left and right
       doc.moveTo(rightHeaderX - 20, headerY + 20)

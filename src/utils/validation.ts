@@ -85,7 +85,7 @@ export const createProductSchema = Joi.object({
 
 export const updateProductSchema = createProductSchema.fork(
   Object.keys(createProductSchema.describe().keys),
-  ((schema: Joi.Schema, key: string, parent?: any) => {
+  ((schema: Joi.Schema, key: string) => {
     if (key === 'currentStock') return schema.forbidden();
     if (key === 'images') return schema.forbidden();
     return schema.optional();

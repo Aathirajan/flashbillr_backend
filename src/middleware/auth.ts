@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JWTPayload } from '../utils/auth';
 
 // logger removed
-import { UserRole } from '@prisma/client';
+
 
 export interface AuthenticatedRequest extends Request {
   user?: JWTPayload;

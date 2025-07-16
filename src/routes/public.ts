@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Response } from 'express';
 import { prisma } from '../utils/database';
 import { createError } from '../middleware/errorHandler';
 
@@ -36,7 +36,7 @@ const router = express.Router();
  *                 author:
  *                   type: string
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', (_, res: Response) => {
   res.json({
     name: 'Flashbillr Backend',
     description: 'Flashbillr is a robust backend service designed to support fast, scalable, and secure billing and order management for stores. It provides APIs for authentication, product management, order processing, and reporting.',
@@ -54,8 +54,8 @@ router.get('/', (req: Request, res: Response) => {
     ],
     version: process.env.npm_package_version || '1.0.0',
     environment: process.env.NODE_ENV || 'development',
-    repository: 'https://github.com/Aathirajan/flashbillr_backend',
-    author: 'Aathirajan',
+    // repository: 'https://github.com/Aathirajan/flashbillr_backend',
+    author: 'Aathi rajan',
   });
 });
 
@@ -87,7 +87,7 @@ router.get('/', (req: Request, res: Response) => {
  *                 currentTime:
  *                   type: string
  */
-router.get('/health', async (req: Request, res: Response) => {
+router.get('/health', async (_, res: Response) => {
   let dbStatus = 'unknown';
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -162,15 +162,15 @@ router.get('/health', async (req: Request, res: Response) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/store/:slug', async (req: any, res: any, next: any) => {
+router.get('/store/:storeId', async (req: any, res: any, next: any) => {
   try {
-    const { slug } = req.params;
+    const { storeId } = req.params;
 
-    const store = await prisma.store.findFirst({
-      where: { 
-        slug, 
-        deletedAt: null, 
-        isActive: true 
+    const store = await prisma.store.findUnique({
+      where: {
+        id: storeId,
+        deletedAt: null,
+        isActive: true
       },
       select: {
         id: true,
@@ -292,17 +292,17 @@ router.get('/store/:slug', async (req: any, res: any, next: any) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/store/:slug/products', async (req: any, res: any, next: any) => {
+router.get('/store/:storeId/products', async (req: any, res: any, next: any) => {
   try {
-    const { slug } = req.params;
+    const { storeId } = req.params;
     const { category, search, page = 1, limit = 20 } = req.query;
 
     // First, get the store
-    const store = await prisma.store.findFirst({
-      where: { 
-        slug, 
-        deletedAt: null, 
-        isActive: true 
+    const store = await prisma.store.findUnique({
+      where: {
+        id: storeId,
+        deletedAt: null,
+        isActive: true
       }
     });
 
@@ -338,17 +338,21 @@ router.get('/store/:slug/products', async (req: any, res: any, next: any) => {
           { name: 'asc' }
         ],
         skip,
-        take: Number(limit)
+        take: Number(limit),
+        include: {
+          category: true
+        }
       }),
       prisma.product.count({ where })
     ]);
 
-    // Format products for public display
+    // Format products for public display, including category name
     const formattedProducts = products.map((product: any) => ({
       id: product.id,
       name: product.name,
       description: product.description,
       categoryId: product.categoryId,
+      categoryName: product.category ? product.category.name : null,
       brand: product.brand,
       sku: product.sku,
       mrp: product.mrp,
@@ -408,16 +412,15 @@ router.get('/store/:slug/products', async (req: any, res: any, next: any) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/store/:slug/categories', async (req: any, res: any, next: any) => {
+router.get('/store/:storeId/categories', async (req: any, res: any, next: any) => {
   try {
-    const { slug } = req.params;
+    const { storeId } = req.params;
 
-    // First, get the store
-    const store = await prisma.store.findFirst({
-      where: { 
-        slug, 
-        deletedAt: null, 
-        isActive: true 
+    const store = await prisma.store.findUnique({
+      where: {
+        id: storeId,
+        deletedAt: null,
+        isActive: true
       }
     });
 
@@ -425,20 +428,14 @@ router.get('/store/:slug/categories', async (req: any, res: any, next: any) => {
       throw createError('Store not found', 404);
     }
 
-    const categories = await prisma.product.findMany({
-      where: { 
-        storeId: store.id, 
-        deletedAt: null, 
-        isActive: true 
+    const categories = await prisma.category.findMany({
+      where: {
+        storeId: store.id
       },
-      select: { categoryId: true },
-      distinct: ['categoryId'],
-      orderBy: { categoryId: 'asc' }
+      orderBy: { name: 'asc' }
     });
 
-    res.json({
-      categories: categories.map((c: any) => c.category)
-    });
+    res.json({ categories });
   } catch (error) {
     next(error);
   }
@@ -446,19 +443,19 @@ router.get('/store/:slug/categories', async (req: any, res: any, next: any) => {
 
 /**
  * @swagger
- * /api/public/store/{slug}/products/{productId}:
+ * /api/public/store/{storeId}/products/{productId}:
  *   get:
  *     tags: [Public]
  *     summary: Get single product details
  *     description: Get detailed information about a specific product
  *     parameters:
  *       - in: path
- *         name: slug
+ *         name: storeId
  *         required: true
  *         schema:
  *           type: string
- *         description: Store slug
- *         example: my-store
+ *         description: Store ID
+ *         example: clp1234567890
  *       - in: path
  *         name: productId
  *         required: true
@@ -525,16 +522,15 @@ router.get('/store/:slug/categories', async (req: any, res: any, next: any) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/store/:slug/products/:productId', async (req: any, res: any, next: any) => {
+router.get('/store/:storeId/products/:productId', async (req: any, res: any, next: any) => {
   try {
-    const { slug, productId } = req.params;
+    const { storeId, productId } = req.params;
 
-    // First, get the store
-    const store = await prisma.store.findFirst({
-      where: { 
-        slug, 
-        deletedAt: null, 
-        isActive: true 
+    const store = await prisma.store.findUnique({
+      where: {
+        id: storeId,
+        deletedAt: null,
+        isActive: true
       }
     });
 

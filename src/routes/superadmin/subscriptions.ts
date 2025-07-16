@@ -79,7 +79,7 @@ const createSubscriptionSchema = Joi.object({
  *                         format: date-time
  *                         description: Last updated date
  */
-router.get('/', async (req, res, next) => {
+router.get('/', async (_req, res, next) => {
   try {
     const subscriptions = await prisma.subscription.findMany({
       where: { deletedAt: null },
@@ -336,7 +336,7 @@ router.patch('/:id/status', async (req, res, next) => {
 });
 
 // Get expiring subscriptions (within 30 days)
-router.get('/expiring', async (req, res, next) => {
+router.get('/expiring', async (_req, res, next) => {
   try {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);

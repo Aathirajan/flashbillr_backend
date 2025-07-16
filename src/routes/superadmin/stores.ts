@@ -89,7 +89,7 @@ router.get('/check-slug', async (req, res, next) => {
  *                             type: integer
  *                             description: Number of products
  */
-router.get('/', async (req, res, next) => {
+router.get('/', async (_req, res, next) => {
   try {
     const stores = await prisma.store.findMany({
       where: { deletedAt: null },

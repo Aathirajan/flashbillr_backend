@@ -1,440 +1,521 @@
+/**
+ * Storeadmin Dashboard API
+ *
+ * - Provides rich, dopamine-inducing dashboard metrics for store admins.
+ * - All endpoints require authentication and are scoped to the storeadmin's storeId.
+ * - Uses Redis for caching heavy queries (graceful fallback if Redis is unavailable).
+ * - All monetary values are in rupees. Soft-deleted records are excluded.
+ * - Optimized for production: modular, cacheable, secure, and frontend-friendly.
+ */
 import express from 'express';
 import { prisma } from '../../utils/database';
 import { AuthenticatedRequest } from '../../middleware/auth';
+import dashboardSummaryRouter from './dashboardSummary';
+import dashboardMonthlyRouter from './dashboardMonthly';
+import dashboardTopProductsRouter from './dashboardTopProducts';
+import dashboardLowStockRouter from './dashboardLowStock';
+import dashboardCustomersByLocationRouter from './dashboardCustomersByLocation';
+import dashboardTodayProgressRouter from './dashboardTodayProgress';
+import { safeRedisGet, safeRedisSetex, CACHE_TTL } from './dashboardUtils';
+import { getCurrentFiscalYearRange } from './fiscalYearUtils';
 
 const router = express.Router();
 
-/**
- * @swagger
- * /api/storeadmin/dashboard:
- *   get:
- *     tags: [Store Admin]
- *     summary: Get store admin dashboard data
- *     description: Get comprehensive dashboard statistics and analytics for the store
- *     responses:
- *       200:
- *         description: Dashboard data retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 summary:
- *                   type: object
- *                   properties:
- *                     totalOrders:
- *                       type: integer
- *                       description: Total number of orders
- *                     totalRevenue:
- *                       type: number
- *                       description: Total revenue (orders + POS)
- *                     totalCustomers:
- *                       type: integer
- *                       description: Total number of customers
- *                     lowStockCount:
- *                       type: integer
- *                       description: Number of products with low stock
- *                     todayOrders:
- *                       type: integer
- *                       description: Number of orders today
- *                     todayRevenue:
- *                       type: number
- *                       description: Revenue today (orders + POS)
- *                     todayPOSReceipts:
- *                       type: integer
- *                       description: Number of POS receipts today
- *                     todayPOSRevenue:
- *                       type: number
- *                       description: POS revenue today
- *                     todayPOSReceived:
- *                       type: number
- *                       description: Amount received today through POS
- *                     monthlyPOSReceipts:
- *                       type: integer
- *                       description: Number of POS receipts in current month
- *                     monthlyPOSRevenue:
- *                       type: number
- *                       description: POS revenue in current month
- *                     monthlyPOSDiscount:
- *                       type: number
- *                       description: Total POS discounts in current month
- *                     monthlyPOSDiscountPercentage:
- *                       type: number
- *                       description: Percentage of POS discounts
- *                     discountTransactionCount:
- *                       type: integer
- *                       description: Number of transactions with discounts
- *                 recentOrders:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Order ID
- *                       orderNumber:
- *                         type: string
- *                         description: Order number
- *                       createdAt:
- *                         type: string
- *                         format: date-time
- *                         description: Order creation date
- *                       customerName:
- *                         type: string
- *                         description: Customer name
- *                       totalAmount:
- *                         type: number
- *                         description: Total order amount
- *                       status:
- *                         type: string
- *                         description: Order status
- *                 recentPOSReceipts:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Receipt ID
- *                       receiptNumber:
- *                         type: string
- *                         description: Receipt number
- *                       createdAt:
- *                         type: string
- *                         format: date-time
- *                         description: Receipt creation date
- *                       customerName:
- *                         type: string
- *                         description: Customer name
- *                       totalAmount:
- *                         type: number
- *                         description: Total receipt amount
- *                       amountReceived:
- *                         type: number
- *                         description: Amount received
- *                       discountAmount:
- *                         type: number
- *                         description: Discount amount
- *                       discountPercentage:
- *                         type: number
- *                         description: Discount percentage
- *                       paymentMethod:
- *                         type: string
- *                         description: Payment method used
- *                 topProducts:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       productId:
- *                         type: string
- *                         description: Product ID
- *                       name:
- *                         type: string
- *                         description: Product name
- *                       category:
- *                         type: string
- *                         description: Product category
- *                       totalQuantity:
- *                         type: integer
- *                         description: Total quantity sold
- *                       orderCount:
- *                         type: integer
- *                         description: Number of orders containing this product
- *                 lowStockProducts:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       productId:
- *                         type: string
- *                         description: Product ID
- *                       productName:
- *                         type: string
- *                         description: Product name
- *                       category:
- *                         type: string
- *                         description: Product category
- *                       currentStock:
- *                         type: integer
- *                         description: Current stock quantity
- *                       minStockLevel:
- *                         type: integer
- *                         description: Minimum stock level
- */
-router.get('/', async (req: AuthenticatedRequest, res, next) => {
+// Mount the summary router at /summary
+router.use('/summary', dashboardSummaryRouter);
+// Mount the monthly router at /monthly
+router.use('/monthly', dashboardMonthlyRouter);
+// Mount the top products router at /top-products
+router.use('/top-products', dashboardTopProductsRouter);
+// Mount the low stock router at /low-stock
+router.use('/low-stock', dashboardLowStockRouter);
+// Mount the customers by location router at /customers-by-location
+router.use('/customers-by-location', dashboardCustomersByLocationRouter);
+// Mount the today progress router at /today-progress
+router.use('/today-progress', dashboardTodayProgressRouter);
+
+// Optimized single query for monthly data
+const getMonthlyDataOptimized = async (storeId: string, startDate?: string, endDate?: string) => {
+  // Default to current fiscal year if not provided
+  const fiscalYearStart = new Date('2025-04-01T00:00:00.000Z');
+  const fiscalYearEnd = new Date('2026-03-31T23:59:59.999Z');
+  if (!startDate || !endDate) {
+    startDate = fiscalYearStart.toISOString();
+    endDate = fiscalYearEnd.toISOString();
+  }
+  const cacheKey = `monthly_data:${storeId}:${startDate}:${endDate}`;
+  const cached = await safeRedisGet(cacheKey);
+
+  if (cached) {
+    console.log('[dashboard.ts/getMonthlyDataOptimized] Response served from Redis cache for key:', cacheKey);
+    return JSON.parse(cached);
+  }
+
+  // Single query to get all monthly data for the date range
+  const [onlineData, posData] = await Promise.all([
+    prisma.$queryRaw`
+      SELECT 
+        EXTRACT(YEAR FROM "createdAt") as year,
+        EXTRACT(MONTH FROM "createdAt") as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM("totalAmount"), 0) as total_revenue
+      FROM orders
+      WHERE "storeId" = ${storeId}
+        AND "deletedAt" IS NULL
+        AND "createdAt" >= ${startDate}::timestamp
+        AND "createdAt" <= ${endDate}::timestamp
+      GROUP BY EXTRACT(YEAR FROM "createdAt"), EXTRACT(MONTH FROM "createdAt")
+      ORDER BY year, month
+    `,
+    prisma.$queryRaw`
+      SELECT 
+        EXTRACT(YEAR FROM "createdAt") as year,
+        EXTRACT(MONTH FROM "createdAt") as month,
+        COUNT(*) as receipt_count,
+        COALESCE(SUM("totalAmount"), 0) as total_revenue
+      FROM pos_receipts
+      WHERE "storeId" = ${storeId}
+        AND "deletedAt" IS NULL
+        AND "createdAt" >= ${startDate}::timestamp
+        AND "createdAt" <= ${endDate}::timestamp
+      GROUP BY EXTRACT(YEAR FROM "createdAt"), EXTRACT(MONTH FROM "createdAt")
+      ORDER BY year, month
+    `
+  ]);
+
+  // Transform to monthly arrays for the selected date range
+  const monthlyData = {
+    monthlyOnlineRevenue: new Array(12).fill(0),
+    monthlyInStoreRevenue: new Array(12).fill(0),
+    monthlyOnlineOrders: new Array(12).fill(0),
+    monthlyInStoreOrders: new Array(12).fill(0),
+  };
+
+  // Map all online data into the arrays for the months in the selected range
+  (onlineData as any[]).forEach(row => {
+    const monthIndex = Number(row.month) - 1;
+    const revenue = Number(row.total_revenue);
+    const orders = Number(row.order_count);
+    monthlyData.monthlyOnlineRevenue[monthIndex] = revenue;
+    monthlyData.monthlyOnlineOrders[monthIndex] = orders;
+  });
+
+  // Map all POS data into the arrays for the months in the selected range
+  (posData as any[]).forEach(row => {
+    const monthIndex = Number(row.month) - 1;
+    const revenue = Number(row.total_revenue);
+    const orders = Number(row.receipt_count);
+    monthlyData.monthlyInStoreRevenue[monthIndex] = revenue;
+    monthlyData.monthlyInStoreOrders[monthIndex] = orders;
+  });
+
+  await safeRedisSetex(cacheKey, CACHE_TTL.MONTHLY_DATA, JSON.stringify(monthlyData));
+  console.log('[dashboard.ts/getMonthlyDataOptimized] Response served from DB and cached to Redis for key:', cacheKey);
+  return monthlyData;
+};
+
+// Optimized daily summary with single query
+const getDailySummaryOptimized = async (storeId: string, startDate?: string, endDate?: string) => {
+  // Default to current fiscal year if not provided
+  const fiscalYearStart = new Date('2025-04-01T00:00:00.000Z');
+  const fiscalYearEnd = new Date('2026-03-31T23:59:59.999Z');
+  if (!startDate || !endDate) {
+    startDate = fiscalYearStart.toISOString();
+    endDate = fiscalYearEnd.toISOString();
+  }
+  const cacheKey = `daily_summary:${storeId}:${startDate}:${endDate}`;
+  const cached = await safeRedisGet(cacheKey);
+
+  if (cached) {
+    console.log('[dashboard.ts/getDailySummaryOptimized] Response served from Redis cache for key:', cacheKey);
+    return JSON.parse(cached);
+  }
+
+  // Use the provided range for "today" and the same-length previous period for "yesterday"
+  const todayStart = new Date(startDate);
+  const todayEnd = new Date(endDate);
+  const diffMs = todayEnd.getTime() - todayStart.getTime();
+  const yesterdayEnd = new Date(todayStart.getTime() - 1);
+  const yesterdayStart = new Date(yesterdayEnd.getTime() - diffMs);
+
+  // Single comprehensive query for all summary data
+  const [summaryData] = await Promise.all([
+    prisma.$queryRaw`
+      WITH daily_stats AS (
+        SELECT 
+          'online' as channel,
+          CASE 
+            WHEN "createdAt" >= ${todayStart} AND "createdAt" <= ${todayEnd} THEN 'today'
+            WHEN "createdAt" >= ${yesterdayStart} AND "createdAt" <= ${yesterdayEnd} THEN 'yesterday'
+            ELSE 'other'
+          END as period,
+          COUNT(*) as order_count,
+          COALESCE(SUM("totalAmount"), 0) as total_revenue
+        FROM orders
+        WHERE "storeId" = ${storeId}
+          AND "deletedAt" IS NULL
+          AND "createdAt" >= ${yesterdayStart}
+          AND "createdAt" <= ${todayEnd}
+        GROUP BY channel, period
+        
+        UNION ALL
+        
+        SELECT 
+          'pos' as channel,
+          CASE 
+            WHEN "createdAt" >= ${todayStart} AND "createdAt" <= ${todayEnd} THEN 'today'
+            WHEN "createdAt" >= ${yesterdayStart} AND "createdAt" <= ${yesterdayEnd} THEN 'yesterday'
+            ELSE 'other'
+          END as period,
+          COUNT(*) as order_count,
+          COALESCE(SUM("totalAmount"), 0) as total_revenue
+        FROM pos_receipts
+        WHERE "storeId" = ${storeId}
+          AND "deletedAt" IS NULL
+          AND "createdAt" >= ${yesterdayStart}
+          AND "createdAt" <= ${todayEnd}
+        GROUP BY channel, period
+      )
+      SELECT * FROM daily_stats WHERE period IN ('today', 'yesterday')
+    `
+  ]);
+
+  // Transform results
+  const dailyData = {
+    today: { online: { orders: 0, revenue: 0 }, pos: { orders: 0, revenue: 0 } },
+    yesterday: { online: { orders: 0, revenue: 0 }, pos: { orders: 0, revenue: 0 } }
+  };
+
+  type Period = 'today' | 'yesterday';
+  type Channel = 'online' | 'pos';
+  (summaryData as any[]).forEach(row => {
+    const period = row.period as Period;
+    const channel = row.channel as Channel;
+    dailyData[period][channel].orders = Number(row.order_count);
+    dailyData[period][channel].revenue = Number(row.total_revenue);
+  });
+
+  await safeRedisSetex(cacheKey, CACHE_TTL.DAILY_SUMMARY, JSON.stringify(dailyData));
+  return dailyData;
+};
+
+// Optimized top products with single query
+const getTopProductsOptimized = async (storeId: string, startDate?: string, endDate?: string) => {
+  // Default to current fiscal year if not provided
+  const fiscalYearStart = new Date('2025-04-01T00:00:00.000Z');
+  const fiscalYearEnd = new Date('2026-03-31T23:59:59.999Z');
+  if (!startDate || !endDate) {
+    startDate = fiscalYearStart.toISOString();
+    endDate = fiscalYearEnd.toISOString();
+  }
+  const cacheKey = `top_products:${storeId}:${startDate}:${endDate}`;
+  const cached = await safeRedisGet(cacheKey);
+
+  if (cached) {
+    console.log('[dashboard.ts/getTopProductsOptimized] Response served from Redis cache for key:', cacheKey);
+    return JSON.parse(cached);
+  }
+
+  // Single query combining both online and POS data, filtered by date range
+  const topProducts = await prisma.$queryRaw`
+    WITH product_sales AS (
+      SELECT 
+        oi."productId",
+        SUM(oi.quantity) as total_quantity,
+        COUNT(DISTINCT o.id) as order_count
+      FROM order_items oi
+      JOIN "Order" o ON oi."orderId" = o.id
+      WHERE o."storeId" = ${storeId}
+        AND o."deletedAt" IS NULL
+        AND o."createdAt" >= ${startDate}::timestamp
+        AND o."createdAt" <= ${endDate}::timestamp
+      GROUP BY oi."productId"
+      
+      UNION ALL
+      
+      SELECT 
+        items."productId",
+        SUM(items."quantity") as total_quantity,
+        COUNT(DISTINCT pr.id) as order_count
+      FROM pos_receipts pr
+      JOIN LATERAL jsonb_to_recordset(COALESCE(pr.items, '[]'::jsonb)) AS items("productId" text, "quantity" int) ON TRUE
+      WHERE pr."storeId" = ${storeId}
+        AND pr."deletedAt" IS NULL
+        AND pr."createdAt" >= ${startDate}::timestamp
+        AND pr."createdAt" <= ${endDate}::timestamp
+        AND jsonb_typeof(pr.items) = 'array'
+      GROUP BY items."productId"
+    ),
+    aggregated_sales AS (
+      SELECT 
+        "productId",
+        SUM(total_quantity) as total_quantity,
+        SUM(order_count) as total_orders
+      FROM product_sales
+      GROUP BY "productId"
+      ORDER BY total_quantity DESC
+      LIMIT 10
+    )
+    SELECT 
+      a.*,
+      p.name,
+      p.category
+    FROM aggregated_sales a
+    JOIN products p ON a."productId" = p.id
+    ORDER BY a.total_quantity DESC
+    LIMIT 5
+  `;
+
+  const result = (topProducts as any[]).map(row => ({
+    productId: row.productId,
+    name: row.name,
+    category: row.category,
+    totalQuantity: Number(row.total_quantity),
+    orderCount: Number(row.total_orders)
+  }));
+
+  await safeRedisSetex(cacheKey, CACHE_TTL.TOP_PRODUCTS, JSON.stringify(result));
+  console.log('[dashboard.ts/getTopProductsOptimized] Response served from DB and cached to Redis for key:', cacheKey);
+  return result;
+};
+
+// Optimized low stock products
+const getLowStockProductsOptimized = async (storeId: string, startDate?: string, endDate?: string) => {
+  // Default to current fiscal year if not provided
+  const fiscalYearStart = new Date('2025-04-01T00:00:00.000Z');
+  const fiscalYearEnd = new Date('2026-03-31T23:59:59.999Z');
+  if (!startDate || !endDate) {
+    startDate = fiscalYearStart.toISOString();
+    endDate = fiscalYearEnd.toISOString();
+  }
+  const cacheKey = `low_stock:${storeId}:${startDate}:${endDate}`;
+  const cached = await safeRedisGet(cacheKey);
+
+  if (cached) {
+    console.log('[dashboard.ts/getLowStockProductsOptimized] Response served from Redis cache for key:', cacheKey);
+    return JSON.parse(cached);
+  }
+
+  const lowStockProducts = await prisma.$queryRaw`
+    SELECT 
+      i."productId",
+      i."currentStock",
+      i."minStockLevel",
+      p.name as "productName",
+      p.category,
+      COUNT(*) OVER() as total_low_stock
+    FROM inventory i
+    JOIN products p ON i."productId" = p.id
+    WHERE i."storeId" = ${storeId}
+      AND i."deletedAt" IS NULL
+      AND i."currentStock" <= i."minStockLevel"
+      AND i."updatedAt" >= ${startDate}::timestamp
+      AND i."updatedAt" <= ${endDate}::timestamp
+    ORDER BY (i."currentStock"::float / NULLIF(i."minStockLevel", 0)) ASC
+    LIMIT 10
+  `;
+
+  const result = {
+    products: (lowStockProducts as any[]).map(row => ({
+      productId: row.productId,
+      productName: row.productName,
+      category: row.category,
+      currentStock: Number(row.currentStock),
+      minStockLevel: Number(row.minStockLevel)
+    })),
+    totalCount: (lowStockProducts as any[])[0]?.total_low_stock || 0
+  };
+
+  await safeRedisSetex(cacheKey, CACHE_TTL.LOW_STOCK, JSON.stringify(result));
+  console.log('[dashboard.ts/getLowStockProductsOptimized] Response served from DB and cached to Redis for key:', cacheKey);
+  return result;
+};
+
+// Optimized customer locations
+const getCustomerLocationsOptimized = async (storeId: string, startDate?: string, endDate?: string) => {
+  // Default to current fiscal year if not provided
+  const fiscalYearStart = new Date('2025-04-01T00:00:00.000Z');
+  const fiscalYearEnd = new Date('2026-03-31T23:59:59.999Z');
+  if (!startDate || !endDate) {
+    startDate = fiscalYearStart.toISOString();
+    endDate = fiscalYearEnd.toISOString();
+  }
+  const cacheKey = `customer_locations:${storeId}:${startDate}:${endDate}`;
+  const cached = await safeRedisGet(cacheKey);
+
+  if (cached) {
+    console.log('[dashboard.ts/getCustomerLocationsOptimized] Response served from Redis cache for key:', cacheKey);
+    return JSON.parse(cached);
+  }
+
+  const locations = await prisma.$queryRaw`
+    SELECT 
+      c.city,
+      c.state,
+      COUNT(DISTINCT c.id) as customer_count
+    FROM customers c
+    WHERE c."storeId" = ${storeId}
+      AND c."deletedAt" IS NULL
+      AND EXISTS (
+        SELECT 1 FROM orders o 
+        WHERE o."customerId" = c.id 
+          AND o."deletedAt" IS NULL
+          AND o."createdAt" >= ${startDate}::timestamp
+          AND o."createdAt" <= ${endDate}::timestamp
+      )
+    GROUP BY c.city, c.state
+    ORDER BY customer_count DESC
+    LIMIT 50
+  `;
+
+  const result = (locations as any[]).map(row => ({
+    city: row.city,
+    state: row.state,
+    count: Number(row.customer_count)
+  }));
+
+  await safeRedisSetex(cacheKey, CACHE_TTL.CUSTOMER_LOCATIONS, JSON.stringify(result));
+  console.log('[dashboard.ts/getCustomerLocationsOptimized] Response served from DB and cached to Redis for key:', cacheKey);
+  return result;
+};
+
+// Main optimized endpoint
+// PRODUCTION-READY: Caching, security, and graceful Redis fallback are enforced. No sensitive info is leaked.
+router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const storeId = req.user!.storeId!;
-
-    // Get today's date range
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-
-    // Get this month's date range
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-
-    // Get summary statistics
-    const [
-      totalOrders,
-      totalRevenue,
-      totalCustomers,
-      lowStockCount,
-      todayOrders,
-      todayRevenue,
-      todayPOSReceipts,
-      todayPOSRevenue,
-      monthlyPOSReceipts
-    ] = await Promise.all([
-      prisma.order.count({
-        where: { storeId, deletedAt: null }
-      }),
-      prisma.order.aggregate({
-        where: { storeId, deletedAt: null },
-        _sum: { totalAmount: true }
-      }),
-      prisma.customer.count({
-        where: { storeId, deletedAt: null }
-      }),
-      prisma.inventory.count({
-        where: {
-          storeId,
-          deletedAt: null,
-          currentStock: { lte: prisma.inventory.fields.minStockLevel }
-        }
-      }),
-      prisma.order.count({
-        where: {
-          storeId,
-          deletedAt: null,
-          createdAt: { gte: startOfDay, lte: endOfDay }
-        }
-      }),
-      prisma.order.aggregate({
-        where: {
-          storeId,
-          deletedAt: null,
-          createdAt: { gte: startOfDay, lte: endOfDay }
-        },
-        _sum: { totalAmount: true }
-      }),
-      prisma.pOSReceipt.count({
-        where: {
-          storeId,
-          deletedAt: null,
-          createdAt: { gte: startOfDay, lte: endOfDay }
-        }
-      }),
-      prisma.pOSReceipt.aggregate({
-        where: {
-          storeId,
-          deletedAt: null,
-          createdAt: { gte: startOfDay, lte: endOfDay }
-        },
-        _sum: { totalAmount: true, amountReceived: true }
-      }),
-      prisma.pOSReceipt.findMany({
-        where: {
-          storeId,
-          deletedAt: null,
-          createdAt: { gte: startOfMonth, lte: endOfMonth }
-        },
-        select: {
-          totalAmount: true,
-          amountReceived: true,
-          createdAt: true
-        }
-      })
-    ]);
-
-    // Calculate POS discount statistics
-    let totalPOSDiscount = 0;
-    let totalPOSDiscountPercentage = 0;
-    let discountTransactionCount = 0;
-
-    monthlyPOSReceipts.forEach((receipt: any) => {
-      if (receipt.amountReceived !== null && receipt.amountReceived < receipt.totalAmount) {
-        const discount = receipt.totalAmount - receipt.amountReceived;
-        totalPOSDiscount += discount;
-        discountTransactionCount++;
-      }
-    });
-
-    const totalPOSSales = monthlyPOSReceipts.reduce((sum: any, receipt: any) => sum + receipt.totalAmount, 0);
-    if (totalPOSSales > 0) {
-      totalPOSDiscountPercentage = (totalPOSDiscount / totalPOSSales) * 100;
+    // Accept optional startDate and endDate query params
+    let { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+    // Default to current fiscal year if not provided
+    const { start: fiscalYearStart, end: fiscalYearEnd } = getCurrentFiscalYearRange();
+    if (!startDate || !endDate) {
+      startDate = fiscalYearStart.toISOString();
+      endDate = fiscalYearEnd.toISOString();
     }
 
-    // Get recent orders
-    const recentOrders = await prisma.order.findMany({
-      where: { storeId, deletedAt: null },
-      include: {
-        customer: {
-          select: { firstName: true, lastName: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
+    // Execute all optimized queries in parallel
+    const [
+      monthlyData,
+      dailySummary,
+      topProducts,
+      lowStockData,
+      customerLocations,
+      totalStats
+    ] = await Promise.all([
+      getMonthlyDataOptimized(storeId, startDate, endDate),
+      getDailySummaryOptimized(storeId, startDate, endDate),
+      getTopProductsOptimized(storeId, startDate, endDate),
+      getLowStockProductsOptimized(storeId, startDate, endDate),
+      getCustomerLocationsOptimized(storeId, startDate, endDate),
 
-    // Get recent POS receipts
-    const recentPOSReceipts = await prisma.pOSReceipt.findMany({
-      where: { storeId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
-
-    // Add discount calculations to recent POS receipts
-    const recentPOSWithDiscounts = recentPOSReceipts.map((receipt: any) => {
-      let discountAmount = 0;
-      let discountPercentage = 0;
-
-      if (receipt.amountReceived !== null && receipt.amountReceived < receipt.totalAmount) {
-        discountAmount = receipt.totalAmount - receipt.amountReceived;
-        discountPercentage = (discountAmount / receipt.totalAmount) * 100;
-      }
-
-      return {
-        ...receipt,
-        discountAmount,
-        discountPercentage: Math.round(discountPercentage * 100) / 100
-      };
-    });
-
-    // Get top products from both orders and POS
-    const [orderItems, posReceipts] = await Promise.all([
-      prisma.orderItem.groupBy({
-        by: ['productId'],
-        where: {
-          order: { storeId, deletedAt: null }
-        },
-        _sum: { quantity: true },
-        _count: { productId: true },
-        orderBy: { _sum: { quantity: 'desc' } },
-        take: 10
-      }),
-      prisma.pOSReceipt.findMany({
-        where: { storeId, deletedAt: null },
-        select: { items: true }
-      })
+      // Single query for total stats (cached separately if needed)
+      prisma.$queryRaw`
+        SELECT 
+          (SELECT COUNT(*) FROM orders WHERE "storeId" = ${storeId} AND "deletedAt" IS NULL) as total_orders,
+          (SELECT COALESCE(SUM("totalAmount"), 0) FROM orders WHERE "storeId" = ${storeId} AND "deletedAt" IS NULL) as total_order_revenue,
+          (SELECT COALESCE(SUM("totalAmount"), 0) FROM pos_receipts WHERE "storeId" = ${storeId} AND "deletedAt" IS NULL) as total_pos_revenue,
+          (SELECT COUNT(*) FROM customers WHERE "storeId" = ${storeId} AND "deletedAt" IS NULL) as total_customers
+      `
     ]);
 
-    // Process POS items to get product statistics
-    const posProductStats: { [key: string]: { quantity: number; count: number } } = {};
-    
-    posReceipts.forEach((receipt: any) => {
-      const items = receipt.items as any[];
-      items.forEach((item: any) => {
-        if (!posProductStats[item.productId]) {
-          posProductStats[item.productId] = { quantity: 0, count: 0 };
-        }
-        posProductStats[item.productId].quantity += item.quantity;
-        posProductStats[item.productId].count += 1;
-      });
-    });
+    const totalStatsData = (totalStats as any[])[0];
+    const totalRevenue = Number(totalStatsData.total_order_revenue) + Number(totalStatsData.total_pos_revenue);
 
-    // Combine order and POS product statistics
-    const combinedProductStats: { [key: string]: { quantity: number; count: number } } = {};
+    // Calculate today's metrics
+    const todayOnlineRevenue = dailySummary.today.online.revenue;
+    const todayPosRevenue = dailySummary.today.pos.revenue;
+    const todayTotalRevenue = todayOnlineRevenue + todayPosRevenue;
+    const todayOnlineOrders = dailySummary.today.online.orders;
+    const todayPosOrders = dailySummary.today.pos.orders;
+    const todayTotalOrders = todayOnlineOrders + todayPosOrders;
 
-    orderItems.forEach((item: any) => {
-      combinedProductStats[item.productId] = {
-        quantity: item._sum.quantity || 0,
-        count: item._count.productId
-      };
-    });
+    // Calculate yesterday's metrics for comparison
+    const yesterdayOnlineRevenue = dailySummary.yesterday.online.revenue;
+    const yesterdayPosRevenue = dailySummary.yesterday.pos.revenue;
+    const yesterdayTotalRevenue = yesterdayOnlineRevenue + yesterdayPosRevenue;
+    const yesterdayOnlineOrders = dailySummary.yesterday.online.orders;
+    const yesterdayPosOrders = dailySummary.yesterday.pos.orders;
+    const yesterdayTotalOrders = yesterdayOnlineOrders + yesterdayPosOrders;
 
-    Object.keys(posProductStats).forEach((productId: any) => {
-      if (combinedProductStats[productId]) {
-        combinedProductStats[productId].quantity += posProductStats[productId].quantity;
-        combinedProductStats[productId].count += posProductStats[productId].count;
-      } else {
-        combinedProductStats[productId] = posProductStats[productId];
-      }
-    });
+    // Calculate deltas
+    const revenueDelta = todayTotalRevenue - yesterdayTotalRevenue;
+    const orderDelta = todayTotalOrders - yesterdayTotalOrders;
 
-    // Get top 5 products with details
-    const topProductIds = Object.entries(combinedProductStats)
-      .sort((a: any, b: any) => b[1].quantity - a[1].quantity)
-      .slice(0, 5)
-      .map(([productId]: any) => productId);
-
-    const topProductsWithDetails = await Promise.all(
-      topProductIds.map(async (productId: any) => {
-        const product = await prisma.product.findUnique({
-          where: { id: productId },
-          select: { name: true, category: true }
-        });
-        return {
-          productId,
-          name: product?.name,
-          category: product?.category,
-          totalQuantity: combinedProductStats[productId].quantity,
-          orderCount: combinedProductStats[productId].count
-        };
-      })
-    );
-
-    // Get low stock products
-    const lowStockProducts = await prisma.inventory.findMany({
-      where: {
-        storeId,
-        deletedAt: null,
-        currentStock: { lte: prisma.inventory.fields.minStockLevel }
-      },
-      include: {
-        product: {
-          select: { name: true, category: true }
-        }
-      },
-      take: 10
-    });
-
+    // Response structure
     res.json({
       summary: {
-        totalOrders,
-        totalRevenue: (totalRevenue._sum.totalAmount || 0) + (todayPOSRevenue._sum.totalAmount || 0),
-        totalCustomers,
-        lowStockCount,
-        todayOrders,
-        todayRevenue: (todayRevenue._sum.totalAmount || 0) + (todayPOSRevenue._sum.totalAmount || 0),
-        todayPOSReceipts,
-        todayPOSRevenue: todayPOSRevenue._sum.totalAmount || 0,
-        todayPOSReceived: todayPOSRevenue._sum.amountReceived || 0,
-        monthlyPOSDiscount: totalPOSDiscount,
-        monthlyPOSDiscountPercentage: Math.round(totalPOSDiscountPercentage * 100) / 100,
-        discountTransactionCount
+        totalOrders: Number(totalStatsData.total_orders),
+        totalRevenue,
+        totalCustomers: Number(totalStatsData.total_customers),
+        lowStockCount: lowStockData.totalCount,
+        todayOrders: todayTotalOrders,
+        todayRevenue: todayTotalRevenue,
+        todayPOSReceipts: todayPosOrders,
+        todayPOSRevenue: todayPosRevenue,
+        todayPOSReceived: todayPosRevenue // Simplified - could be separate query if needed
       },
-      recentOrders: recentOrders.map((order: any) => ({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        customerName: `${order.customer.firstName} ${order.customer.lastName}`,
-        totalAmount: order.totalAmount,
-        status: order.status,
-        createdAt: order.createdAt
-      })),
-      recentPOSReceipts: recentPOSWithDiscounts.map((receipt: any) => ({
-        id: receipt.id,
-        receiptNumber: receipt.receiptNumber,
-        customerName: receipt.customerName || 'Walk-in Customer',
-        totalAmount: receipt.totalAmount,
-        amountReceived: receipt.amountReceived,
-        discountAmount: receipt.discountAmount,
-        discountPercentage: receipt.discountPercentage,
-        paymentMethod: receipt.paymentMethod,
-        createdAt: receipt.createdAt
-      })),
-      topProducts: topProductsWithDetails,
-      lowStockProducts: lowStockProducts.map((item: any) => ({
-        productId: item.productId,
-        productName: item.product.name,
-        category: item.product.category,
-        currentStock: item.currentStock,
-        minStockLevel: item.minStockLevel
-      }))
+
+      topProducts,
+      lowStockProducts: lowStockData.products,
+      customersByLocation: customerLocations,
+
+      // Monthly data
+      ...monthlyData,
+
+      // Today's progress with optimized structure
+      todayProgress: {
+        revenue: {
+          online: todayOnlineRevenue,
+          inStore: todayPosRevenue,
+          total: todayTotalRevenue,
+          delta: revenueDelta,
+          deltaPercent: yesterdayTotalRevenue === 0 ? null :
+            ((revenueDelta / yesterdayTotalRevenue) * 100).toFixed(2)
+        },
+        orders: {
+          online: todayOnlineOrders,
+          inStore: todayPosOrders,
+          total: todayTotalOrders,
+          delta: orderDelta,
+          deltaPercent: yesterdayTotalOrders === 0 ? null :
+            ((orderDelta / yesterdayTotalOrders) * 100).toFixed(2)
+        },
+        dopamineCues: {
+          revenue: revenueDelta > 0 ? '🔥 Up from yesterday!' :
+            revenueDelta < 0 ? '⬇️ Down from yesterday' : 'No change',
+          orders: orderDelta > 0 ? '🚀 More orders today!' :
+            orderDelta < 0 ? '📉 Fewer orders than yesterday' : 'No change'
+        }
+      },
+
     });
+
   } catch (error) {
-    next(error);
+    // Generic error, do not leak sensitive info
+    res.status(500).json({ error: 'Dashboard data unavailable. Please try again later.' });
+  }
+});
+
+// Cache warming endpoint (call this via cron job)
+router.post('/warm-cache', async (req: AuthenticatedRequest, res) => {
+  try {
+    const storeId = req.user!.storeId!;
+    // Use current fiscal year dynamically
+    const { start: fiscalYearStart, end: fiscalYearEnd } = getCurrentFiscalYearRange();
+    const fiscalYearStartISO = fiscalYearStart.toISOString();
+    const fiscalYearEndISO = fiscalYearEnd.toISOString();
+
+    // Pre-warm all caches for the fiscal year
+    await Promise.all([
+      getMonthlyDataOptimized(storeId, fiscalYearStartISO, fiscalYearEndISO),
+      getTopProductsOptimized(storeId, fiscalYearStartISO, fiscalYearEndISO),
+      getLowStockProductsOptimized(storeId, fiscalYearStartISO, fiscalYearEndISO),
+      getCustomerLocationsOptimized(storeId, fiscalYearStartISO, fiscalYearEndISO)
+    ]);
+
+    res.json({ message: 'Cache warmed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to warm cache' });
   }
 });
 

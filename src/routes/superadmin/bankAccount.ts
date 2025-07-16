@@ -30,8 +30,8 @@ router.post('/:storeId/bank-accounts', async (req, res, next) => {
 // Get a specific bank account by id
 router.get('/:storeId/bank-accounts/:id', async (req, res, next) => {
   try {
-    const { storeId, id } = req.params;
-    const bankAccount = await prisma.bankAccount.findFirst({ where: { id, storeId } });
+    const { id } = req.params;
+    const bankAccount = await prisma.bankAccount.findFirst({ where: { id } });
     if (!bankAccount) throw createError('BankAccount not found', 404);
     res.json({ bankAccount });
   } catch (error) {
@@ -42,7 +42,7 @@ router.get('/:storeId/bank-accounts/:id', async (req, res, next) => {
 // Update a specific bank account by id
 router.put('/:storeId/bank-accounts/:id', async (req, res, next) => {
   try {
-    const { storeId, id } = req.params;
+    const { id } = req.params;
     const data = req.body;
     const bankAccount = await prisma.bankAccount.update({ where: { id }, data });
     res.json({ bankAccount });
@@ -55,7 +55,7 @@ router.put('/:storeId/bank-accounts/:id', async (req, res, next) => {
 // Delete a specific bank account by id
 router.delete('/:storeId/bank-accounts/:id', async (req, res, next) => {
   try {
-    const { storeId, id } = req.params;
+    const { id } = req.params;
     await prisma.bankAccount.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {

@@ -1,22 +1,22 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-import swaggerUi from 'swagger-ui-express';
+import cors from 'cors';
 import dotenv from 'dotenv';
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import swaggerUi from 'swagger-ui-express';
 
-import { logger } from './utils/logger';
+import { specs } from './config/swagger';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
-import { specs } from './config/swagger';
+import { logger } from './utils/logger';
 
 // Route imports
-import superadminRoutes from './routes/superadmin';
-import storeadminRoutes from './routes/storeadmin';
-import publicRoutes from './routes/public';
 import authRoutes from './routes/auth';
+import publicRoutes from './routes/public';
 import publicCustomersRoutes from './routes/publicCustomers';
+import storeadminRoutes from './routes/storeadmin';
+import superadminRoutes from './routes/superadmin';
 
 // Load environment variables
 dotenv.config();
@@ -25,7 +25,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Global logger middleware to log every request
-app.use((req, res, next) => {
+app.use((req, _, next) => {
   const user = (req as any).user;
   logger.info('Incoming request', {
     time: new Date().toISOString(),
@@ -44,16 +44,26 @@ app.use((req, res, next) => {
 
 // Security middleware
 app.use(helmet());
-const allowedOrigins = [
-  'https://store1.com',
-  'https://store2.com',
-  // Add more storefront domains as needed
-];
 
+// Temporary: Allow all domains for testing
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
+// TODO: Uncomment and restore this when ready to secure CORS
+// const allowedOrigins = [
+//   'https://store1.com',
+//   'https://store2.com',
+//   ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', 'http://127.0.0.1:3000'] : []),
+//   // Add more storefront domains as needed
+// ];
 // app.use(cors({
-//   origin: function (origin, callback) {
-//     // Allow requests with no origin (like mobile apps, curl, etc.)
+//   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
 //     if (!origin || allowedOrigins.includes(origin)) {
+//       callback(null, true);
+//     } else if (process.env.NODE_ENV === 'development') {
+//       // Allow any origin in development
 //       callback(null, true);
 //     } else {
 //       callback(new Error('Not allowed by CORS'));
@@ -61,9 +71,6 @@ const allowedOrigins = [
 //   },
 //   credentials: true
 // }));
-
-// Allow all CORS requests for now
-app.use(cors());
 
 // Rate limiting
 const limiter = rateLimit({
@@ -187,7 +194,7 @@ app.get('/health', async (req, res) => {
 app.use(express.static('public'));
 
 // Serve landing page HTML at /
-app.get('/', (req, res) => {
+app.get('/', (_, res) => {
   res.sendFile('index.html', { root: 'public' });
 });
 

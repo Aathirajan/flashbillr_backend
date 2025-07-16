@@ -1,8 +1,7 @@
 import express from 'express';
 import { prisma } from '../utils/database';
-import { body, validationResult } from 'express-validator';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { Address, Order, OrderItem } from '@prisma/client';
+import { Address } from '@prisma/client';
 
 const router = express.Router();
 
@@ -54,7 +53,7 @@ import { sendPaymentScreenshotEmail } from '../services/mailgun';
 const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
 
 router.post(
-  '/orders',
+  '/store/:storeId/orders',
   upload.single('paymentScreenshot'),
   // Validation middleware
   [
@@ -229,9 +228,8 @@ router.post(
 
       // Calculate order totals (you may want to refactor this for discounts, taxes, etc.)
       let subtotal = 0;
-      let gstAmount = 0;
       let totalAmount = 0;
-      const orderItems: Omit<OrderItem, 'id' | 'orderId' | 'createdAt' | 'updatedAt'>[] = [];
+      const orderItems: { productId: string; quantity: number; unitPrice: number; totalAmount: number; }[] = []; // Fix type issue
       for (const item of items) {
         const product = await prisma.product.findUnique({ where: { id: item.productId } });
         if (!product) return res.status(400).json({ error: `Product not found: ${item.productId}` });
@@ -393,7 +391,7 @@ router.post(
  *       200:
  *         description: Order tracking info
  */
-router.get('/orders/track', async (req: AuthenticatedRequest, res: any, next: any) => {
+router.get('/store/:storeId/orders/track', async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const { orderNumber, email, phone } = req.query;
     let order = null;
@@ -528,7 +526,7 @@ router.post('/addresses', async (req: AuthenticatedRequest, res: any, next: any)
  *       200:
  *         description: Address updated
  */
-router.put('/addresses/:id', async (req: AuthenticatedRequest, res: any, next: any) => {
+router.put('/store/:storeId/addresses/:id', async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     if (!req.user?.userId) return res.status(401).json({ error: 'Authentication required' });
     const { id } = req.params;
@@ -762,7 +760,7 @@ router.post('/password/forgot', async (req: AuthenticatedRequest, res: any, next
       data: { userId: user.id, token, expiresAt },
     });
     // Send magic link email (implement your own mailer or reuse Mailgun)
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    // const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
     await sendPasswordResetEmail(user.email, token, process.env.STORE_NAME || 'Flashbillr');
     return res.json({ success: true });
   } catch (error) { next(error); }

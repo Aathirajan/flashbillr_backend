@@ -18,8 +18,6 @@ const checkExpiringSubscriptions = async (): Promise<void> => {
     // Calculate date ranges for different reminder intervals
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + (30 * 24 * 60 * 60 * 1000));
-    const sevenDaysFromNow = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
-    const oneDayFromNow = new Date(now.getTime() + (1 * 24 * 60 * 60 * 1000));
 
     // Find subscriptions expiring within 30 days
     const expiringSubscriptions = await prisma.subscription.findMany({

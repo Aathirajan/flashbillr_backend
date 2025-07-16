@@ -40,11 +40,11 @@ model Store {
   brandColor String  @default("#3B82F6")
 
   // Contact & Identity
-  phone           String?
-  email           String
-  whatsapp        String?
-  address         String?
-  ownerName       String?
+  phone     String?
+  email     String
+  whatsapp  String?
+  address   String?
+  ownerName String?
 
   license         String?
   certification   String?
@@ -77,10 +77,10 @@ model Store {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
-  createdById String
+  createdById String?
 
   // Relations
-  creator        User              @relation("StoreCreator", fields: [createdById], references: [id])
+  creator        User?             @relation("StoreCreator", fields: [createdById], references: [id])
   users          User[]            @relation("StoreUsers")
   products       Product[]
   orders         Order[]
@@ -93,6 +93,7 @@ model Store {
   bankAccounts   BankAccount[]
   supportTickets SupportTicket[]
   Category       Category[]
+  spendings      Spending[]
 
   @@map("stores")
 }
@@ -172,6 +173,7 @@ model Product {
   sku          String
   mrp          Float
   sellingPrice Float
+  buyPrice     Float? // Optional, in rupees
   youtubeUrl   String?
   contentType  ContentType?
   isActive     Boolean      @default(true)
@@ -182,8 +184,8 @@ model Product {
   deletedAt    DateTime?
 
   // Relations
-  store      Store          @relation(fields: [storeId], references: [id])
-  category   Category?      @relation(fields: [categoryId], references: [id])
+  store      Store       @relation(fields: [storeId], references: [id])
+  category   Category?   @relation(fields: [categoryId], references: [id])
   images     String[] // Array of image URLs
   inventory  Inventory[]
   orderItems OrderItem[]
@@ -233,24 +235,24 @@ model Category {
 }
 
 model Customer {
-  id              String    @id @default(cuid())
-  firstName       String
-  lastName        String
-  email           String?
-  password        String?
-  emailVerified   Boolean   @default(false)
+  id                     String    @id @default(cuid())
+  firstName              String
+  lastName               String
+  email                  String?
+  password               String?
+  emailVerified          Boolean   @default(false)
   emailVerificationToken String?
-  phone           String
-  address         String?
-  city            String?
-  state           String?
-  pincode         String?
-  notes           String?
-  isGuest         Boolean   @default(false)
-  storeId         String
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+  phone                  String
+  address                String?
+  city                   String?
+  state                  String?
+  pincode                String?
+  notes                  String?
+  isGuest                Boolean   @default(false)
+  storeId                String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
 
   // Relations
   store  Store   @relation(fields: [storeId], references: [id])
@@ -433,4 +435,34 @@ model Subscription {
   store Store @relation(fields: [storeId], references: [id])
 
   @@map("subscriptions")
+}
+
+enum SpendingType {
+  FOOD
+  TRANSPORT
+  PACKAGING
+  ELECTRICITY
+  SOFTWARE
+  INTERNET
+  SALARY
+  FUEL
+  STOCK
+  OTHERS
+}
+
+model Spending {
+  id          String       @id @default(cuid())
+  storeId     String
+  amount      Float
+  type        SpendingType
+  description String?
+  date        DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("spendings")
 }

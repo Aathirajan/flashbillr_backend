@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authenticate, requireSuperAdmin);
 
 // List all support tickets
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const tickets = await getSupportTickets({});
     res.json({ tickets });

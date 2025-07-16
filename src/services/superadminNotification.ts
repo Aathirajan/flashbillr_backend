@@ -1,7 +1,7 @@
 // Helper for creating superadmin notifications for important events
 import { createNotification } from './notification';
 
-export async function notifySuperadmin(type: string, message: string, meta?: Record<string, any>) {
+export async function notifySuperadmin(type: string, message: string, _meta?: Record<string, any>) {
   // Optionally, you can store meta as JSON in a new column if needed
   return createNotification({ type, message }); // userId: null for superadmin/global
 }

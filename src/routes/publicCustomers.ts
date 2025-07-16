@@ -1,4 +1,5 @@
 import express from 'express';
+import publicCustomersAddressesRouter from './publicCustomersAddresses';
 import { prisma } from '../utils/database';
 import Joi from 'joi';
 import bcrypt from 'bcryptjs';
@@ -12,7 +13,10 @@ import {
   customerResendVerificationLimiter
 } from '../middleware/rateLimiters';
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
+
+// Mount address management endpoints
+router.use('/store/:storeId/customers/addresses', publicCustomersAddressesRouter);
 
 // Validation schemas
 const registerSchema = Joi.object({
@@ -31,7 +35,7 @@ const loginSchema = Joi.object({
 });
 
 // Register endpoint
-router.post('/register', customerRegisterLimiter, async (req, res, next) => {
+router.post('/store/:storeId/customers/register', customerRegisterLimiter, async (req, res, next) => {
     try {
         const { error, value } = registerSchema.validate(req.body);
         if (error) return res.status(400).json({ error: error.details[0].message });
@@ -40,7 +44,7 @@ router.post('/register', customerRegisterLimiter, async (req, res, next) => {
         if (existing) return res.status(409).json({ error: 'Email already registered for this store' });
         const hashed = await bcrypt.hash(password, 12);
         const token = jwt.sign({ email, storeId }, process.env.JWT_SECRET || 'changeme', { expiresIn: '1d' });
-        const customer = await prisma.customer.create({
+        await prisma.customer.create({
             data: {
                 email,
                 password: hashed,
@@ -61,7 +65,7 @@ router.post('/register', customerRegisterLimiter, async (req, res, next) => {
 });
 
 // Email verification endpoint
-router.get('/verify-email', async (req, res, next) => {
+router.get('/store/:storeId/customers/verify-email', async (req, res, next) => {
     try {
         const { token } = req.query;
         if (!token || typeof token !== 'string') return res.status(400).json({ error: 'Invalid verification link' });
@@ -85,7 +89,7 @@ router.get('/verify-email', async (req, res, next) => {
 });
 
 // Login endpoint
-router.post('/login', customerLoginLimiter, async (req, res, next) => {
+router.post('/store/:storeId/customers/login', customerLoginLimiter, async (req, res, next) => {
     try {
         const { error, value } = loginSchema.validate(req.body);
         if (error) return res.status(400).json({ error: error.details[0].message });
@@ -103,7 +107,7 @@ router.post('/login', customerLoginLimiter, async (req, res, next) => {
 });
 
 // Get current customer profile
-router.get('/profile', authenticateCustomer, async (req: AuthenticatedCustomerRequest, res, next) => {
+router.get('/store/:storeId/customers/profile', authenticateCustomer, async (req: AuthenticatedCustomerRequest, res, next) => {
   try {
     const { customerId } = req.customer!;
     const customer = await prisma.customer.findUnique({
@@ -116,7 +120,7 @@ router.get('/profile', authenticateCustomer, async (req: AuthenticatedCustomerRe
 });
 
 // Update customer profile
-router.put('/profile', authenticateCustomer, async (req: AuthenticatedCustomerRequest, res, next) => {
+router.put('/store/:storeId/customers/profile', authenticateCustomer, async (req: AuthenticatedCustomerRequest, res, next) => {
   try {
     const { customerId } = req.customer!;
     const { firstName, lastName, phone } = req.body;
@@ -130,7 +134,7 @@ router.put('/profile', authenticateCustomer, async (req: AuthenticatedCustomerRe
 });
 
 // Get order history for customer
-router.get('/orders', authenticateCustomer, async (req: AuthenticatedCustomerRequest, res, next) => {
+router.get('/store/:storeId/customers/orders', authenticateCustomer, async (req: AuthenticatedCustomerRequest, res, next) => {
   try {
     const { customerId } = req.customer!;
     const orders = await prisma.order.findMany({
@@ -143,7 +147,7 @@ router.get('/orders', authenticateCustomer, async (req: AuthenticatedCustomerReq
 });
 
 // Request password reset
-router.post('/forgot-password', customerForgotLimiter, async (req, res, next) => {
+router.post('/store/:storeId/customers/forgot-password', customerForgotLimiter, async (req, res, next) => {
   try {
     const { email, storeId } = req.body;
     if (!email || !storeId) return res.status(400).json({ error: 'Email and storeId required' });
@@ -152,17 +156,16 @@ router.post('/forgot-password', customerForgotLimiter, async (req, res, next) =>
     const resetToken = jwt.sign({ customerId: customer.id, email, storeId }, process.env.JWT_SECRET || 'changeme', { expiresIn: '1h' });
     await prisma.customer.update({ where: { id: customer.id }, data: { emailVerificationToken: resetToken } });
     // Reuse verification email for reset (could make a new template)
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const resetUrl = `${frontendUrl}/reset-customer-password?token=${resetToken}`;
-    const subject = 'Reset your password for Flashbillr';
-    const html = `<p>Hi${customer.firstName ? ' ' + customer.firstName : ''},</p><p>Click below to reset your password:</p><p><a href="${resetUrl}">Reset Password</a></p>`;
+    // These variables are used in the email template
+    // const subject = 'Reset your password for Flashbillr';
+    // const html = `<p>Hi${customer.firstName ? ' ' + customer.firstName : ''},</p><p>Click below to reset your password:</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-customer-password?token=${resetToken}">Reset Password</a></p>`;
     await sendCustomerVerificationEmail(email, resetToken, customer.firstName);
     return res.json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (err) { return next(err); }
 });
 
 // Resend verification email
-router.post('/resend-verification', customerResendVerificationLimiter, async (req, res, next) => {
+router.post('/store/:storeId/customers/resend-verification', customerResendVerificationLimiter, async (req, res, next) => {
   try {
     const { email, storeId } = req.body;
     if (!email || !storeId) return res.status(400).json({ error: 'Email and storeId required' });
@@ -177,7 +180,7 @@ router.post('/resend-verification', customerResendVerificationLimiter, async (re
 });
 
 // Reset password
-router.post('/reset-password', async (req, res, next) => {
+router.post('/store/:storeId/customers/reset-password', async (req, res, next) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) return res.status(400).json({ error: 'Token and new password required' });

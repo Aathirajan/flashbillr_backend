@@ -1,222 +1,663 @@
-import { PrismaClient, OrderStatus, UserRole, SubscriptionStatus, ContentType } from '@prisma/client';
-import { hash } from 'bcryptjs';
+import { PrismaClient, UserRole, SpendingType, SubscriptionStatus } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { Product, User, Inventory, Order } from '@prisma/client';
+import { faker } from '@faker-js/faker';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // --- 1. Delete all data from relevant tables (order matters due to FKs) ---
-  console.log('Cleaning existing data...');
+  // CLEANUP: Delete all data from all tables before seeding
+  console.log('Deleting all data from database...');
+  
+  // Delete records with foreign key dependencies first
   await prisma.orderItem.deleteMany({});
-  await prisma.invoice.deleteMany({});
-  await prisma.pOSReceipt.deleteMany({});
-  await prisma.subscription.deleteMany({});
-  await prisma.order.deleteMany({});
-  await prisma.customer.deleteMany({});
-  await prisma.productImage.deleteMany({});
-  await prisma.product.deleteMany({});
+  console.log('OrderItems deleted.');
   await prisma.inventory.deleteMany({});
-  await prisma.category.deleteMany?.({}); // If exists
+  console.log('Inventory deleted.');
+  await prisma.order.deleteMany({});
+  console.log('Orders deleted.');
+  await prisma.product.deleteMany({});
+  console.log('Products deleted.');
+  
+  // Delete remaining records
+  await prisma.invoice.deleteMany({});
+  console.log('Invoices deleted.');
+  await prisma.pOSReceipt.deleteMany({});
+  console.log('POSReceipts deleted.');
+  await prisma.notification.deleteMany({});
+  console.log('Notifications deleted.');
+  await prisma.passwordResetToken.deleteMany({});
+  console.log('PasswordResetTokens deleted.');
+  await prisma.supportTicket.deleteMany({});
+  console.log('SupportTickets deleted.');
+  await prisma.featuredBrand.deleteMany({});
+  console.log('FeaturedBrands deleted.');
+  await prisma.socialMediaLink.deleteMany({});
+  console.log('SocialMediaLinks deleted.');
+  await prisma.spending.deleteMany({});
+  console.log('Spendings deleted.');
+  await prisma.subscription.deleteMany({});
+  console.log('Subscriptions deleted.');
+  await prisma.bankAccount.deleteMany({});
+  console.log('BankAccounts deleted.');
+  await prisma.category.deleteMany({});
+  console.log('Categories deleted.');
+  await prisma.address.deleteMany({});
+  console.log('Addresses deleted.');
   await prisma.store.deleteMany({});
+  console.log('Stores deleted.');
   await prisma.user.deleteMany({});
+  console.log('Users deleted.');
+  console.log('Database cleanup complete.');
 
-  // --- 2. Create superadmin ---
-  const superAdminEmail = 'saathirajan99@gmail.com';
-  const superAdminPassword = 'password';
-  const hashedSuperAdminPassword = await hash(superAdminPassword, 12);
+  // Hash password
+  const passwordHash = await bcrypt.hash('password', 10);
+  console.log('Password hashed.');
 
-  console.log('Creating superadmin...');
-  const superadmin = await prisma.user.create({
-    data: {
-      email: superAdminEmail,
-      password: hashedSuperAdminPassword,
-      firstName: 'Super',
-      lastName: 'Admin',
+  // Create Superadmin
+  console.log('Creating Superadmin...');
+  const superadmin = await prisma.user.upsert({
+    where: { email: 'saathirajan99@gmail.com' },
+    update: {},
+    create: {
+      email: 'saathirajan99@gmail.com',
+      password: passwordHash,
+      firstName: 'Saa',
+      lastName: 'Thirajan',
       role: UserRole.SUPERADMIN,
       isActive: true,
     },
   });
-  await prisma.user.update({
-    where: { id: superadmin.id },
-    data: { createdById: superadmin.id },
-  });
 
-  // --- 3. Create storeadmin and store ---
-  const storeAdminEmail = 'work.aathirajan@gmail.com';
-  const storeAdminPassword = 'password';
-  const hashedStoreAdminPassword = await hash(storeAdminPassword, 12);
-
-  console.log('Creating store...');
-  const store = await prisma.store.create({
-    data: {
-      name: 'Demo Store',
-      slug: 'demo-store',
-      brandColor: '#3B82F6',
-      email: 'store@example.com',
-      createdById: superadmin.id,
-    },
-  });
-
-  console.log('Creating store admin...');
-  const storeadmin = await prisma.user.create({
-    data: {
-      email: storeAdminEmail,
-      password: hashedStoreAdminPassword,
+  // Create Storeadmin
+  console.log('Creating Storeadmin...');
+  const storeadmin = await prisma.user.upsert({
+    where: { email: 'work.aathirajan@gmail.com' },
+    update: {},
+    create: {
+      email: 'work.aathirajan@gmail.com',
+      password: passwordHash,
       firstName: 'Store',
       lastName: 'Admin',
       role: UserRole.STOREADMIN,
       isActive: true,
-      createdById: superadmin.id,
-      storeId: store.id,
     },
   });
+
+  // Create 5 Stores
+  console.log('Creating 5 stores...');
+  const stores = await Promise.all([
+    prisma.store.upsert({
+      where: { slug: 'alpha-store' },
+      update: {},
+      create: {
+        name: 'Alpha Store',
+        slug: 'alpha-store',
+        email: 'alpha@store.com',
+        logo: 'https://via.placeholder.com/150',
+        createdById: superadmin.id,
+      },
+    }),
+    prisma.store.upsert({
+      where: { slug: 'beta-store' },
+      update: {},
+      create: {
+        name: 'Beta Store',
+        slug: 'beta-store',
+        email: 'beta@store.com',
+        logo: 'https://via.placeholder.com/150',
+        createdById: superadmin.id,
+      },
+    }),
+    prisma.store.upsert({
+      where: { slug: 'gamma-store' },
+      update: {},
+      create: {
+        name: 'Gamma Store',
+        slug: 'gamma-store',
+        email: 'gamma@store.com',
+        logo: 'https://via.placeholder.com/150',
+        createdById: superadmin.id,
+      },
+    }),
+    prisma.store.upsert({
+      where: { slug: 'delta-store' },
+      update: {},
+      create: {
+        name: 'Delta Store',
+        slug: 'delta-store',
+        email: 'delta@store.com',
+        logo: 'https://via.placeholder.com/150',
+        createdById: superadmin.id,
+      },
+    }),
+    prisma.store.upsert({
+      where: { slug: 'epsilon-store' },
+      update: {},
+      create: {
+        name: 'Epsilon Store',
+        slug: 'epsilon-store',
+        email: 'epsilon@store.com',
+        logo: 'https://via.placeholder.com/150',
+        createdById: superadmin.id,
+      },
+    })
+  ]);
+  console.log('Stores created.');
+
+  // Assign storeadmin to first store
+  console.log('Assigning storeadmin to first store...');
   await prisma.user.update({
     where: { id: storeadmin.id },
-    data: { createdById: storeadmin.id },
+    data: { storeId: stores[0].id },
   });
+  console.log('Storeadmin assigned to first store.');
 
-  // --- 4. Create category ---
-  console.log('Creating category...');
-  const category = await prisma.category.create({
+  // Create 5 Categories for first store
+  console.log('Creating 5 categories for first store...');
+  const categories = await Promise.all([
+    prisma.category.upsert({
+      where: { name: 'Beverages' },
+      update: {},
+      create: { name: 'Beverages', storeId: stores[0].id },
+    }),
+    prisma.category.upsert({
+      where: { name: 'Snacks' },
+      update: {},
+      create: { name: 'Snacks', storeId: stores[0].id },
+    }),
+    prisma.category.upsert({
+      where: { name: 'Dairy' },
+      update: {},
+      create: { name: 'Dairy', storeId: stores[0].id },
+    }),
+    prisma.category.upsert({
+      where: { name: 'Bakery' },
+      update: {},
+      create: { name: 'Bakery', storeId: stores[0].id },
+    }),
+    prisma.category.upsert({
+      where: { name: 'Produce' },
+      update: {},
+      create: { name: 'Produce', storeId: stores[0].id },
+    }),
+  ]);
+  console.log('Categories created.');
+
+  // --- ENHANCED DEMO DATA FOR DASHBOARD INTERACTIVITY ---
+  
+
+
+  // Generate 50 products
+  console.log('Generating 50 products...');
+  const demoProducts: Promise<Product>[] = [];
+  for (let i = 0; i < 50; i++) {
+    const cat = categories[Math.floor(Math.random() * categories.length)];
+    demoProducts.push(prisma.product.create({
+      data: {
+        name: faker.commerce.productName() + ' ' + i,
+        sku: `SKU${1000 + i}`,
+        mrp: faker.number.int({ min: 20, max: 500 }),
+        sellingPrice: faker.number.int({ min: 15, max: 480 }),
+        storeId: stores[0].id,
+        categoryId: cat.id,
+        description: faker.commerce.productDescription(),
+        brand: faker.company.name(),
+        contentType: 'PACKET',
+        isActive: true,
+        createdAt: faker.date.past({ years: 1 }),
+        updatedAt: new Date(),
+      },
+    }));
+  }
+  const createdDemoProducts: Product[] = await Promise.all(demoProducts);
+
+  // Generate 200 customers
+  console.log('Generating 200 customers...');
+  const demoCustomers: Promise<User>[] = [];
+  for (let i = 0; i < 200; i++) {
+    demoCustomers.push(prisma.user.create({
+      data: {
+        email: `customer${i}@demo.com`,
+        password: passwordHash,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        role: UserRole.STOREADMIN,
+        isActive: true,
+        addresses: {
+          create: [{
+            name: 'Home',
+            line1: faker.location.streetAddress(),
+            city: faker.location.city(),
+            state: faker.location.state(),
+            zip: faker.location.zipCode(),
+            country: faker.location.country(),
+            phone: '9' + faker.string.numeric(9),
+          }],
+        },
+      },
+    }));
+  }
+  const createdDemoCustomers: User[] = await Promise.all(demoCustomers);
+
+// Create addresses for each customer and store phone mapping
+const customerPhoneMap: Record<string, string> = {};
+for (const cust of createdDemoCustomers) {
+  const address = await prisma.address.create({
     data: {
-      name: 'General',
-      storeId: store.id,
+      userId: cust.id,
+      name: 'Home',
+      line1: faker.location.streetAddress(),
+      city: faker.location.city(),
+      state: faker.location.state(),
+      zip: faker.location.zipCode(),
+      country: faker.location.country(),
+      phone: '9' + faker.string.numeric(9),
+    }
+  });
+  customerPhoneMap[cust.id] = address.phone || '';
+}
+
+  // Generate inventory for all products
+  console.log('Generating inventory records...');
+  const demoInventory: Promise<Inventory>[] = [];
+  for (const prod of createdDemoProducts) {
+    demoInventory.push(prisma.inventory.create({
+      data: {
+        productId: prod.id,
+        storeId: stores[0].id,
+        currentStock: faker.number.int({ min: 0, max: 200 }),
+        minStockLevel: faker.number.int({ min: 5, max: 20 }),
+        deletedAt: null,
+      },
+    }));
+  }
+  await Promise.all(demoInventory);
+
+  // Generate 200 orders (with items)
+  console.log('Generating 200 orders...');
+  const demoOrders: Order[] = [];
+  for (let i = 0; i < 200; i++) {
+    const cust = createdDemoCustomers[Math.floor(Math.random() * createdDemoCustomers.length)];
+    const orderDate = faker.date.between({ from: faker.date.past({ years: 1 }), to: new Date() });
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `ORD${1000 + i}`,
+        storeId: stores[0].id,
+        userId: cust.id,
+        status: 'PAID',
+        subtotal: 0,
+        totalAmount: 0,
+        createdAt: orderDate,
+        updatedAt: orderDate,
+      },
+    });
+    // Add 1-5 items per order
+    let subtotal = 0;
+    let totalAmount = 0;
+    const numItems = faker.number.int({ min: 1, max: 5 });
+    for (let j = 0; j < numItems; j++) {
+      const prod = createdDemoProducts[Math.floor(Math.random() * createdDemoProducts.length)];
+      const qty = faker.number.int({ min: 1, max: 10 });
+      const unitPrice = prod.sellingPrice;
+      const itemTotal = unitPrice * qty;
+      subtotal += itemTotal;
+      totalAmount += itemTotal;
+      await prisma.orderItem.create({
+        data: {
+          orderId: order.id,
+          productId: prod.id,
+          quantity: qty,
+          unitPrice,
+          totalAmount: itemTotal,
+        },
+      });
+    }
+    await prisma.order.update({ where: { id: order.id }, data: { subtotal, totalAmount } });
+    demoOrders.push(order);
+  }
+
+  // Generate 200 POS receipts
+  console.log('Generating 200 POS receipts...');
+  for (let i = 0; i < 200; i++) {
+    const cust = createdDemoCustomers[Math.floor(Math.random() * createdDemoCustomers.length)];
+    const posDate = faker.date.between({ from: faker.date.past({ years: 1 }), to: new Date() });
+    const numItems = faker.number.int({ min: 1, max: 5 });
+    let itemsArr: { productId: string; quantity: number; price: number }[] = [];
+    let subtotal = 0;
+    for (let j = 0; j < numItems; j++) {
+      const prod = createdDemoProducts[Math.floor(Math.random() * createdDemoProducts.length)];
+      const qty = faker.number.int({ min: 1, max: 10 });
+      const price = prod.sellingPrice;
+      itemsArr.push({ productId: prod.id, quantity: qty, price });
+      subtotal += price * qty;
+    }
+    await prisma.pOSReceipt.create({
+      data: {
+        receiptNumber: `POS${1000 + i}`,
+        storeId: stores[0].id,
+        customerName: cust.firstName + ' ' + cust.lastName,
+        customerPhone: customerPhoneMap[cust.id] || '9' + faker.number.int({ min: 100000000, max: 999999999 }),
+        items: itemsArr,
+        subtotal,
+        totalAmount: subtotal + faker.number.int({ min: 0, max: 20 }),
+        amountReceived: subtotal + faker.number.int({ min: 0, max: 50 }),
+        paymentMethod: 'CASH',
+        pdfUrl: 'https://via.placeholder.com/150',
+        createdAt: posDate,
+        updatedAt: posDate,
+      },
+    });
+  }
+  // --- END ENHANCED DEMO DATA ---
+
+  // Create 5 Products for first store
+  console.log('Creating 5 products for first store...');
+  const products = await Promise.all([
+    prisma.product.upsert({
+      where: { sku_storeId: { sku: 'MILK001', storeId: stores[0].id } },
+      update: {},
+      create: {
+        name: 'Milk',
+        sku: 'MILK001',
+        mrp: 50,
+        sellingPrice: 45,
+        storeId: stores[0].id,
+        categoryId: categories[2].id,
+        description: 'Fresh milk',
+        brand: 'DairyBest',
+        contentType: 'PACKET',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }),
+    prisma.product.upsert({
+      where: { sku_storeId: { sku: 'BREAD001', storeId: stores[0].id } },
+      update: {},
+      create: {
+        name: 'Bread',
+        sku: 'BREAD001',
+        mrp: 30,
+        sellingPrice: 28,
+        storeId: stores[0].id,
+        categoryId: categories[3].id,
+        description: 'Whole wheat bread',
+        brand: 'BakeHouse',
+        contentType: 'PACKET',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }),
+    prisma.product.upsert({
+      where: { sku_storeId: { sku: 'APPLE001', storeId: stores[0].id } },
+      update: {},
+      create: {
+        name: 'Apple',
+        sku: 'APPLE001',
+        mrp: 120,
+        sellingPrice: 110,
+        storeId: stores[0].id,
+        categoryId: categories[4].id,
+        description: 'Fresh apples',
+        brand: 'FarmFresh',
+        contentType: 'PIECE',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }),
+    prisma.product.upsert({
+      where: { sku_storeId: { sku: 'JUICE001', storeId: stores[0].id } },
+      update: {},
+      create: {
+        name: 'Juice',
+        sku: 'JUICE001',
+        mrp: 60,
+        sellingPrice: 55,
+        storeId: stores[0].id,
+        categoryId: categories[0].id,
+        description: 'Orange juice',
+        brand: 'Juicy',
+        contentType: 'BOX',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }),
+    prisma.product.upsert({
+      where: { sku_storeId: { sku: 'CHIPS001', storeId: stores[0].id } },
+      update: {},
+      create: {
+        name: 'Chips',
+        sku: 'CHIPS001',
+        mrp: 20,
+        sellingPrice: 18,
+        storeId: stores[0].id,
+        categoryId: categories[1].id,
+        description: 'Potato chips',
+        brand: 'Crunchy',
+        contentType: 'PACKET',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }),
+  ]);
+  console.log('Products created.');
+
+  // Create 5 Bank Accounts for first store
+  console.log('Creating 5 bank accounts for first store...');
+  await Promise.all([
+    prisma.bankAccount.create({
+      data: {
+        storeId: stores[0].id,
+        accountName: 'Alpha Bank',
+        accountNumber: '1111111111',
+        ifscCode: 'ALPHA0001',
+        bankName: 'Alpha Bank',
+      },
+    }),
+    prisma.bankAccount.create({
+      data: {
+        storeId: stores[0].id,
+        accountName: 'Beta Bank',
+        accountNumber: '2222222222',
+        ifscCode: 'BETA0002',
+        bankName: 'Beta Bank',
+      },
+    }),
+    prisma.bankAccount.create({
+      data: {
+        storeId: stores[0].id,
+        accountName: 'Gamma Bank',
+        accountNumber: '3333333333',
+        ifscCode: 'GAMMA0003',
+        bankName: 'Gamma Bank',
+      },
+    }),
+    prisma.bankAccount.create({
+      data: {
+        storeId: stores[0].id,
+        accountName: 'Delta Bank',
+        accountNumber: '4444444444',
+        ifscCode: 'DELTA0004',
+        bankName: 'Delta Bank',
+      },
+    }),
+    prisma.bankAccount.create({
+      data: {
+        storeId: stores[0].id,
+        accountName: 'Epsilon Bank',
+        accountNumber: '5555555555',
+        ifscCode: 'EPSILON0005',
+        bankName: 'Epsilon Bank',
+      },
+    }),
+  ]);
+  console.log('Bank accounts created.');
+
+  // Create 5 Spendings for first store
+  console.log('Creating 5 spendings for first store...');
+  await Promise.all([
+    prisma.spending.create({ data: { storeId: stores[0].id, amount: 1000, type: SpendingType.FOOD, description: 'Food supplies', date: new Date() } }),
+    prisma.spending.create({ data: { storeId: stores[0].id, amount: 500, type: SpendingType.PACKAGING, description: 'Packaging materials', date: new Date() } }),
+    prisma.spending.create({ data: { storeId: stores[0].id, amount: 200, type: SpendingType.INTERNET, description: 'Internet bill', date: new Date() } }),
+    prisma.spending.create({ data: { storeId: stores[0].id, amount: 800, type: SpendingType.SALARY, description: 'Staff salary', date: new Date() } }),
+    prisma.spending.create({ data: { storeId: stores[0].id, amount: 300, type: SpendingType.FUEL, description: 'Fuel expenses', date: new Date() } }),
+  ]);
+  console.log('Spendings created.');
+
+  // Create 5 Subscriptions for first store
+  console.log('Creating 5 subscriptions for first store...');
+  await Promise.all([
+    prisma.subscription.create({ data: { storeId: stores[0].id, status: SubscriptionStatus.ACTIVE, startDate: new Date(), endDate: new Date(Date.now() + 1000*60*60*24*30), amount: 299, notes: 'Monthly subscription' } }),
+    prisma.subscription.create({ data: { storeId: stores[0].id, status: SubscriptionStatus.EXPIRED, startDate: new Date('2023-01-01'), endDate: new Date('2023-02-01'), amount: 299, notes: 'Expired subscription' } }),
+    prisma.subscription.create({ data: { storeId: stores[0].id, status: SubscriptionStatus.CANCELLED, startDate: new Date('2023-03-01'), endDate: new Date('2023-04-01'), amount: 299, notes: 'Cancelled subscription' } }),
+    prisma.subscription.create({ data: { storeId: stores[0].id, status: SubscriptionStatus.ACTIVE, startDate: new Date(), endDate: new Date(Date.now() + 1000*60*60*24*60), amount: 499, notes: 'Bi-monthly subscription' } }),
+    prisma.subscription.create({ data: { storeId: stores[0].id, status: SubscriptionStatus.ACTIVE, startDate: new Date(), endDate: new Date(Date.now() + 1000*60*60*24*90), amount: 799, notes: 'Quarterly subscription' } }),
+  ]);
+  console.log('Subscriptions created.');
+
+  // Create 5 Social Media Links for first store
+  console.log('Creating 5 social media links for first store...');
+  await Promise.all([
+    prisma.socialMediaLink.create({ data: { storeId: stores[0].id, platform: 'Facebook', url: 'https://facebook.com/alphastore' } }),
+    prisma.socialMediaLink.create({ data: { storeId: stores[0].id, platform: 'Instagram', url: 'https://instagram.com/alphastore' } }),
+    prisma.socialMediaLink.create({ data: { storeId: stores[0].id, platform: 'Twitter', url: 'https://twitter.com/alphastore' } }),
+    prisma.socialMediaLink.create({ data: { storeId: stores[0].id, platform: 'LinkedIn', url: 'https://linkedin.com/company/alphastore' } }),
+    prisma.socialMediaLink.create({ data: { storeId: stores[0].id, platform: 'YouTube', url: 'https://youtube.com/alphastore' } }),
+  ]);
+  console.log('Social media links created.');
+
+  // Create 5 Addresses for storeadmin
+  console.log('Creating 5 addresses for storeadmin...');
+  await Promise.all([
+    prisma.address.create({ data: { userId: storeadmin.id, name: 'Home', line1: '123 Main St', city: 'CityA', state: 'StateA', zip: '100001', country: 'CountryA', phone: '9000000001' } }),
+    prisma.address.create({ data: { userId: storeadmin.id, name: 'Office', line1: '456 Office Rd', city: 'CityB', state: 'StateB', zip: '200002', country: 'CountryB', phone: '9000000002' } }),
+    prisma.address.create({ data: { userId: storeadmin.id, name: 'Warehouse', line1: '789 Warehouse Ave', city: 'CityC', state: 'StateC', zip: '300003', country: 'CountryC', phone: '9000000003' } }),
+    prisma.address.create({ data: { userId: storeadmin.id, name: 'Storefront', line1: '321 Storefront Blvd', city: 'CityD', state: 'StateD', zip: '400004', country: 'CountryD', phone: '9000000004' } }),
+    prisma.address.create({ data: { userId: storeadmin.id, name: 'Other', line1: '654 Other Ln', city: 'CityE', state: 'StateE', zip: '500005', country: 'CountryE', phone: '9000000005' } }),
+  ]);
+  console.log('Addresses created.');
+
+  // FeaturedBrand
+  console.log('Creating 1 featured brand...');
+  await prisma.featuredBrand.create({
+    data: {
+      storeId: stores[0].id,
+      brandId: 'brand-001',
+      name: 'Brand One',
+      logo: 'https://via.placeholder.com/150',
     },
   });
+  console.log('Featured brand created.');
 
-  // --- 5. Create product ---
-  console.log('Creating product...');
-  const product = await prisma.product.create({
+  // SupportTicket
+  console.log('Creating 1 support ticket...');
+  await prisma.supportTicket.create({
     data: {
-      name: 'Demo Product',
-      description: 'A demo product for testing.',
-      brand: 'DemoBrand',
-      sku: 'SKU-DEMO-1',
-      mrp: 100,
-      sellingPrice: 90,
-      storeId: store.id,
-      categoryId: category.id,
-      contentType: ContentType.BOX,
-      isActive: true,
+      storeId: stores[0].id,
+      title: 'Need help with POS',
+      message: 'The POS is not printing receipts.',
+      status: 'OPEN',
     },
   });
+  console.log('Support ticket created.');
 
-  // --- 6. Create product image ---
-  console.log('Creating product image...');
-  await prisma.productImage.create({
-    data: {
-      url: 'https://via.placeholder.com/300x300.png?text=Demo+Product',
-      productId: product.id,
-    },
-  });
-
-  // --- 7. Create inventory ---
-  await prisma.inventory.create({
-    data: {
-      productId: product.id,
-      storeId: store.id,
-      currentStock: 100,
-      minStockLevel: 10,
-      maxStockLevel: 1000,
-    },
-  });
-
-  // --- 8. Create customer ---
-  console.log('Creating customer...');
-  const customer = await prisma.customer.create({
-    data: {
-      firstName: 'Test',
-      lastName: 'Customer',
-      email: 'customer1@mail.com',
-      phone: '9000000001',
-      storeId: store.id,
-    },
-  });
-
-  // --- 9. Create order ---
-  console.log('Creating order...');
+  // Order
+  console.log('Creating 1 order...');
   const order = await prisma.order.create({
     data: {
-      orderNumber: 'ORD-DEMO-1',
-      storeId: store.id,
-      customerId: customer.id,
-      status: OrderStatus.PAID,
-      subtotal: 90,
-      gstAmount: 16.2,
-      totalAmount: 106.2,
-      paymentMethod: 'CASH',
+      orderNumber: 'ORD001',
+      storeId: stores[0].id,
+      userId: storeadmin.id,
+      status: 'PAID',
+      subtotal: 100,
+      totalAmount: 110,
       createdAt: new Date(),
       updatedAt: new Date(),
     },
   });
+  console.log('Order created.');
 
-  // --- 10. Create order item ---
+  // OrderItem
+  console.log('Creating 1 order item...');
   await prisma.orderItem.create({
     data: {
       orderId: order.id,
-      productId: product.id,
-      quantity: 1,
-      unitPrice: 90,
-      gstAmount: 16.2,
-      totalAmount: 106.2,
+      productId: products[0].id,
+      quantity: 2,
+      unitPrice: 50,
+      totalAmount: 100,
     },
   });
+  console.log('Order item created.');
 
-  // --- 11. Create invoice ---
-  console.log('Creating invoice...');
+  // Invoice
+  console.log('Creating 1 invoice...');
   await prisma.invoice.create({
     data: {
-      invoiceNumber: 'INV-DEMO-1',
+      invoiceNumber: 'INV001',
       orderId: order.id,
-      storeId: store.id,
-      customerId: customer.id,
-      subtotal: 90,
-      gstAmount: 16.2,
-      totalAmount: 106.2,
+      storeId: stores[0].id,
+      subtotal: 100,
+      totalAmount: 110,
+      pdfUrl: 'https://via.placeholder.com/150',
       isPos: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     },
   });
+  console.log('Invoice created.');
 
-  // --- 12. Create POSReceipt ---
-  console.log('Creating POSReceipt...');
+  // POSReceipt
+  console.log('Creating 1 POS receipt...');
   await prisma.pOSReceipt.create({
     data: {
-      receiptNumber: 'POSR-DEMO-1',
-      storeId: store.id,
-      customerName: 'Test Customer',
-      customerPhone: '9000000001',
-      items: [{ sku: product.sku, name: product.name, qty: 1, price: 90 }],
-      subtotal: 90,
-      gstAmount: 16.2,
-      totalAmount: 106.2,
+      receiptNumber: 'POS001',
+      storeId: stores[0].id,
+      customerName: 'John Doe',
+      customerPhone: '9000000009',
+      items: { items: [{ name: 'Milk', qty: 2, price: 50 }] },
+      subtotal: 100,
+      totalAmount: 110,
+      amountReceived: 120,
       paymentMethod: 'CASH',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      pdfUrl: 'https://via.placeholder.com/150',
     },
   });
+  console.log('POS receipt created.');
 
-  // --- 13. Create subscription ---
-  console.log('Creating subscription...');
-  await prisma.subscription.create({
+  // Notification
+  console.log('Creating 1 notification...');
+  await prisma.notification.create({
     data: {
-      storeId: store.id,
-      status: SubscriptionStatus.ACTIVE,
-      startDate: new Date(),
-      endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
-      amount: 999,
-      notes: 'Demo subscription for Demo Store',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      type: 'ORDER',
+      message: 'Order ORD001 has been paid.',
+      userId: storeadmin.id,
+      isRead: false,
     },
   });
+  console.log('Notification created.');
 
-  console.log('Database seeded successfully!');
+  // PasswordResetToken
+  console.log('Creating 1 password reset token...');
+  await prisma.passwordResetToken.create({
+    data: {
+      userId: storeadmin.id,
+      token: 'reset-token-001',
+      expiresAt: new Date(Date.now() + 3600000),
+      used: false,
+    },
+  });
+  console.log('Password reset token created.');
+
+  console.log('Seeding complete!');
 }
 
 main()
   .catch((e) => {
-    console.error('Error during seeding:', e);
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {

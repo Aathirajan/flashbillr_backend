@@ -5,7 +5,7 @@ import { authenticate } from '../../middleware/auth';
 const router = express.Router();
 
 // Get notifications for the superadmin (global notifications only)
-router.get('/', authenticate, async (req: any, res) => {
+router.get('/', authenticate, async (_req: any, res) => {
   try {
     // For superadmin, userId is undefined to get global notifications
     const notifications = await getNotifications();
@@ -27,7 +27,7 @@ router.patch('/:id/read', authenticate, async (req: any, res) => {
 });
 
 // Mark all notifications as read
-router.patch('/read-all', authenticate, async (req: any, res) => {
+router.patch('/read-all', authenticate, async (_req: any, res) => {
   try {
     // Mark all global notifications as read
     const prisma = require('../../prisma/client').default || require('../../prisma/client');

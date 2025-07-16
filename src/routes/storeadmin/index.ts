@@ -11,6 +11,8 @@ import notificationsRoutes from './notifications';
 import meRoutes from './me';
 import categoriesRoutes from './categories';
 
+import spendingRoutes from './spending';
+
 const router = express.Router();
 
 // Apply authentication and authorization to all store admin routes
@@ -18,6 +20,7 @@ router.use(authenticate);
 router.use(requireStoreAdmin);
 
 // Mount sub-routes
+router.use('/spending', spendingRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/products', productsRoutes);
 router.use('/inventory', inventoryRoutes);
@@ -28,7 +31,6 @@ router.use('/invoices', invoicesRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/me', meRoutes);
 router.use('/categories', categoriesRoutes);
-
 router.use('/support-tickets', require('./supportTickets').default);
 
 export default router;
