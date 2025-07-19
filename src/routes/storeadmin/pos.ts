@@ -373,89 +373,95 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
     const store = await prisma.store.findUnique({
       where: { id: storeId }
     });
-
     if (!store) {
       throw createError('Store not found', 404);
     }
 
-    // Validate products exist and calculate totals
-    let subtotal = 0;
-    let totalGST = 0;
-    const validatedItems = [];
-
-    for (const item of items) {
-      const product = await prisma.product.findFirst({
-        where: {
-          id: item.productId,
-          storeId,
-          deletedAt: null,
-          isActive: true
-        }
+    // Start transaction for atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Upsert customer by phone/store
+      let customer = await tx.customer.findFirst({
+        where: { phone: customerPhone, storeId, deletedAt: null }
       });
-
-      if (!product) {
-        throw createError(`Product ${item.productName} not found or inactive`, 404);
-      }
-
-      const itemTotal = item.quantity * item.unitPrice;
-      const gstAmount = 0; // gstRate removed
-      const itemTotalWithGST = itemTotal + gstAmount;
-
-      subtotal += itemTotal;
-      totalGST += gstAmount;
-
-      validatedItems.push({
-        productId: item.productId,
-        productName: product.name,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        
-        gstAmount,
-        totalAmount: itemTotalWithGST
-      });
-
-      // Update inventory
-      await prisma.inventory.updateMany({
-        where: { productId: item.productId, storeId },
-        data: {
-          currentStock: {
-            decrement: item.quantity
+      if (!customer) {
+        customer = await tx.customer.create({
+          data: {
+            firstName: customerName || 'Walk-in Customer',
+            lastName: '', // Default lastName for walk-in
+            phone: customerPhone,
+            storeId
           }
+        });
+      }
+
+      // 2. Validate products and deduct inventory
+      let subtotal = 0;
+      let totalGST = 0;
+      const validatedItems = [];
+      for (const item of items) {
+        const product = await tx.product.findFirst({
+          where: {
+            id: item.productId,
+            storeId,
+            deletedAt: null,
+            isActive: true
+          }
+        });
+        if (!product) {
+          throw createError(`Product ${item.productName} not found or inactive`, 404);
+        }
+        const inventory = await tx.inventory.findFirst({
+          where: { productId: item.productId, storeId }
+        });
+        if (!inventory || inventory.currentStock < item.quantity) {
+          throw createError(`Insufficient stock for product: ${product.name}`, 400);
+        }
+        await tx.inventory.update({
+          where: { id: inventory.id },
+          data: { currentStock: { decrement: item.quantity } }
+        });
+        const itemTotal = item.quantity * item.unitPrice;
+        const gstAmount = 0; // Adjust GST if needed
+        const itemTotalWithGST = itemTotal + gstAmount;
+        subtotal += itemTotal;
+        totalGST += gstAmount;
+        validatedItems.push({
+          productId: item.productId,
+          productName: product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          gstAmount,
+          totalAmount: itemTotalWithGST
+        });
+      }
+      const totalAmount = subtotal + totalGST;
+      if (amountReceived !== undefined && amountReceived < 0) {
+        throw createError('Amount received cannot be negative', 400);
+      }
+
+      // 3. Generate receipt number
+      const receiptCount = await tx.pOSReceipt.count({ where: { storeId } });
+      const receiptNumber = `POS-${store.slug.toUpperCase()}-${String(receiptCount + 1).padStart(6, '0')}`;
+
+      // 4. Create POS receipt (link to customer)
+      const receipt = await tx.pOSReceipt.create({
+        data: {
+          receiptNumber,
+          storeId,
+          customerName,
+          customerPhone,
+          items: validatedItems,
+          subtotal,
+          totalAmount,
+          amountReceived,
+          paymentMethod
         }
       });
-    }
 
-    const totalAmount = subtotal + totalGST;
-
-    // Validate amount received if provided
-    if (amountReceived !== undefined && amountReceived < 0) {
-      throw createError('Amount received cannot be negative', 400);
-    }
-
-    // Generate receipt number
-    const receiptCount = await prisma.pOSReceipt.count({
-      where: { storeId }
-    });
-    const receiptNumber = `POS-${store.slug.toUpperCase()}-${String(receiptCount + 1).padStart(6, '0')}`;
-
-    // Create POS receipt
-    const receipt = await prisma.pOSReceipt.create({
-      data: {
-        receiptNumber,
-        storeId,
-        customerName,
-        customerPhone,
-        items: validatedItems,
-        subtotal,
-
-        totalAmount,
-        amountReceived,
-        paymentMethod
-      }
+      return { receipt, customer, totalAmount, subtotal, totalGST, validatedItems, receiptNumber };
     });
 
-    // Generate PDF
-    // Transform items to match InvoiceData interface
+    // 5. Generate PDF and upload (outside transaction)
     const transformedItems = items.map((item: any) => ({
       name: item.productName,
       particulars: item.description,
@@ -464,52 +470,61 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
       per: 'PCS',
       amount: item.totalAmount
     }));
-
     const invoiceData = {
-      invoiceNumber: receiptNumber,
+      invoiceNumber: result.receiptNumber,
       date: new Date().toLocaleDateString('en-IN'),
       storeName: store.name,
       storeAddress: store.address ?? undefined,
       storePhone: store.phone ?? undefined,
       storeEmail: store.email ?? undefined,
-      // storeGST: store.gstNumber ?? undefined,
       brandColor: store.brandColor,
-      customerName: customerName || 'Walk-in Customer',
-      customerPhone,
+      customerName: result.customer.firstName,
+      customerPhone: result.customer.phone,
       items: transformedItems,
-      subtotal,
-      totalGST,
-      grandTotal: totalAmount,
+      subtotal: result.subtotal,
+      totalGST: result.totalGST,
+      grandTotal: result.totalAmount,
       paymentMethod,
-      notes: amountReceived !== undefined && amountReceived !== totalAmount 
-        ? `Amount Received: ₹${amountReceived}${amountReceived < totalAmount ? ` (Discount: ₹${totalAmount - amountReceived})` : ''}`
+      notes: amountReceived !== undefined && amountReceived !== result.totalAmount
+        ? `Amount Received: ₹${amountReceived}${amountReceived < result.totalAmount ? ` (Discount: ₹${result.totalAmount - amountReceived})` : ''}`
         : undefined,
-      total: totalAmount,
-      totalInWords: convertNumberToWords(totalAmount)
+      total: result.totalAmount,
+      totalInWords: convertNumberToWords(result.totalAmount)
     } as const;
-
     const pdfBuffer = await generateInvoicePDF(invoiceData);
-    const pdfUrl = await uploadInvoicePDF(pdfBuffer, storeId, receiptNumber);
+    const pdfUrl = await uploadInvoicePDF(pdfBuffer, storeId, result.receiptNumber);
 
-    // Update receipt with PDF URL
-    await prisma.pOSReceipt.update({
-      where: { id: receipt.id },
-      data: { pdfUrl }
-    });
+    // 6. Update receipt with PDF URL and create invoice record
+    const [updatedReceipt, invoice] = await Promise.all([
+      prisma.pOSReceipt.update({
+        where: { id: result.receipt.id },
+        data: { pdfUrl }
+      }),
+      prisma.invoice.create({
+        data: {
+          invoiceNumber: result.receiptNumber,
+          isPos: true,
+          storeId,
+          customerId: result.customer.id,
+          subtotal: result.subtotal,
+          totalAmount: result.totalAmount,
+          pdfUrl
+        }
+      })
+    ]);
 
-    // Calculate discount information for response
+    // 7. Prepare discount info
     let discountAmount = 0;
     let discountPercentage = 0;
-
-    if (amountReceived !== undefined && amountReceived < totalAmount) {
-      discountAmount = totalAmount - amountReceived;
-      discountPercentage = (discountAmount / totalAmount) * 100;
+    if (amountReceived !== undefined && amountReceived < result.totalAmount) {
+      discountAmount = result.totalAmount - amountReceived;
+      discountPercentage = (discountAmount / result.totalAmount) * 100;
     }
 
     logger.info('POS receipt created successfully:', {
-      receiptId: receipt.id,
-      receiptNumber,
-      totalAmount,
+      receiptId: updatedReceipt.id,
+      receiptNumber: updatedReceipt.receiptNumber,
+      totalAmount: updatedReceipt.totalAmount,
       amountReceived,
       discountAmount,
       storeId
@@ -517,11 +532,12 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
 
     res.status(201).json({
       receipt: {
-        ...receipt,
-        pdfUrl,
+        ...updatedReceipt,
         discountAmount,
-        discountPercentage: Math.round(discountPercentage * 100) / 100
-      }
+        discountPercentage: Math.round(discountPercentage * 100) / 100,
+        customer: result.customer
+      },
+      invoice
     });
   } catch (error) {
     next(error);

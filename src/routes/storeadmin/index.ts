@@ -13,7 +13,9 @@ import categoriesRoutes from './categories';
 
 import spendingRoutes from './spending';
 
-const router = express.Router();
+import salesAgentRoutes from './salesAgent';
+
+const router = express.Router({ mergeParams: true });
 
 // Apply authentication and authorization to all store admin routes
 router.use(authenticate);
@@ -31,6 +33,7 @@ router.use('/invoices', invoicesRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/me', meRoutes);
 router.use('/categories', categoriesRoutes);
+router.use('/stores/:storeId/sales-agents', salesAgentRoutes);
 router.use('/support-tickets', require('./supportTickets').default);
 
 export default router;

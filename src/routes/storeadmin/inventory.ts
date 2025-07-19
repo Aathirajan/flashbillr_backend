@@ -7,6 +7,28 @@ import { sendLowStockAlert } from '../../services/mailgun';
 import Joi from 'joi';
 import { validate } from '../../middleware/validation';
 
+// Joi schema for bulk upload via SKU (expects: { items: BulkUpdateItem[] })
+const bulkUploadSchema = Joi.alternatives().try(
+  Joi.array().items(
+    Joi.object({
+      sku: Joi.string().required(),
+      stock: Joi.number().integer().min(0).required(),
+      minStock: Joi.number().integer().min(0).required(),
+      maxStock: Joi.number().integer().min(0).required(),
+    })
+  ).min(1),
+  Joi.object({
+    items: Joi.array().items(
+      Joi.object({
+        sku: Joi.string().required(),
+        stock: Joi.number().integer().min(0).required(),
+        minStock: Joi.number().integer().min(0).required(),
+        maxStock: Joi.number().integer().min(0).required(),
+      })
+    ).min(1).required(),
+  })
+);
+
 const router = express.Router();
 
 const updateInventorySchema = Joi.object({
@@ -30,102 +52,7 @@ const bulkUpdateSchema = Joi.object({
   ).min(1).required()
 });
 
-/**
- * @swagger
- * /api/storeadmin/inventory:
- *   get:
- *     tags: [Store Admin]
- *     summary: Get all inventory items
- *     description: Retrieve all inventory items with filtering and pagination
- *     parameters:
- *       - in: query
- *         name: lowStock
- *         schema:
- *           type: boolean
- *         description: Filter items with low stock (current stock <= min stock level)
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search inventory items by product name or SKU
- *       - in: query
- *         name: category
- *         schema:
- *           type: string
- *         description: Filter by product category
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 20
- *         description: Number of items per page
- *     responses:
- *       200:
- *         description: List of inventory items retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 inventory:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Inventory ID
- *                       productId:
- *                         type: string
- *                         description: Product ID
- *                       product:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           name:
- *                             type: string
- *                           sku:
- *                             type: string
- *                           category:
- *                             type: string
- *                           brand:
- *                             type: string
- *                       currentStock:
- *                         type: integer
- *                         description: Current stock quantity
- *                       minStockLevel:
- *                         type: integer
- *                         description: Minimum stock level
- *                       maxStockLevel:
- *                         type: integer
- *                         description: Maximum stock level
- *                       lastUpdated:
- *                         type: string
- *                         format: date-time
- *                         description: Last update date
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                       description: Current page number
- *                     limit:
- *                       type: integer
- *                       description: Number of items per page
- *                     total:
- *                       type: integer
- *                       description: Total number of items
- *                     totalPages:
- *                       type: integer
- *                       description: Total number of pages
- */
+
 router.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
@@ -193,8 +120,8 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
     const inventoryWithStatus = inventory.map((item: any) => ({
       ...item,
       isLowStock: item.currentStock <= item.minStockLevel,
-      stockStatus: item.currentStock === 0 ? 'OUT_OF_STOCK' : 
-                   item.currentStock <= item.minStockLevel ? 'LOW_STOCK' : 'IN_STOCK'
+      stockStatus: item.currentStock === 0 ? 'OUT_OF_STOCK' :
+        item.currentStock <= item.minStockLevel ? 'LOW_STOCK' : 'IN_STOCK'
     }));
 
     res.json({
@@ -211,64 +138,7 @@ router.get('/', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/inventory/product/{productId}:
- *   get:
- *     tags: [Store Admin]
- *     summary: Get inventory item by product ID
- *     description: Retrieve inventory item details by product ID
- *     parameters:
- *       - in: path
- *         name: productId
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID
- *     responses:
- *       200:
- *         description: Inventory item retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 inventory:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                       description: Inventory ID
- *                     productId:
- *                       type: string
- *                       description: Product ID
- *                     product:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                         name:
- *                           type: string
- *                         sku:
- *                           type: string
- *                         category:
- *                           type: string
- *                         brand:
- *                           type: string
- *                     currentStock:
- *                       type: integer
- *                       description: Current stock quantity
- *                     minStockLevel:
- *                       type: integer
- *                       description: Minimum stock level
- *                     maxStockLevel:
- *                       type: integer
- *                       description: Maximum stock level
- *                     lastUpdated:
- *                       type: string
- *                       format: date-time
- *                       description: Last update date
- */
+
 router.get('/product/:productId', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { productId } = req.params;
@@ -299,8 +169,8 @@ router.get('/product/:productId', async (req: AuthenticatedRequest, res, next) =
       inventory: {
         ...inventory,
         isLowStock: inventory.currentStock <= inventory.minStockLevel,
-        stockStatus: inventory.currentStock === 0 ? 'OUT_OF_STOCK' : 
-                     inventory.currentStock <= inventory.minStockLevel ? 'LOW_STOCK' : 'IN_STOCK'
+        stockStatus: inventory.currentStock === 0 ? 'OUT_OF_STOCK' :
+          inventory.currentStock <= inventory.minStockLevel ? 'LOW_STOCK' : 'IN_STOCK'
       }
     });
   } catch (error) {
@@ -308,77 +178,7 @@ router.get('/product/:productId', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/inventory/product/{productId}:
- *   put:
- *     tags: [Store Admin]
- *     summary: Update inventory item
- *     description: Update inventory levels and thresholds for a product
- *     parameters:
- *       - in: path
- *         name: productId
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               currentStock:
- *                 type: integer
- *                 minimum: 0
- *                 description: Current stock quantity
- *               minStockLevel:
- *                 type: integer
- *                 minimum: 0
- *                 description: Minimum stock threshold
- *               maxStockLevel:
- *                 type: integer
- *                 minimum: 0
- *                 description: Maximum stock threshold
- *               adjustment:
- *                 type: integer
- *                 description: Stock adjustment amount
- *               adjustmentReason:
- *                 type: string
- *                 maxLength: 500
- *                 description: Reason for stock adjustment
- *     responses:
- *       200:
- *         description: Inventory item updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 inventory:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                       description: Inventory ID
- *                     productId:
- *                       type: string
- *                       description: Product ID
- *                     currentStock:
- *                       type: integer
- *                       description: Updated current stock
- *                     minStockLevel:
- *                       type: integer
- *                       description: Updated minimum stock level
- *                     maxStockLevel:
- *                       type: integer
- *                       description: Updated maximum stock level
- *                     lastUpdated:
- *                       type: string
- *                       format: date-time
- *                       description: Last update date
- */
+
 router.put('/product/:productId', validate(updateInventorySchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const { productId } = req.params;
@@ -433,7 +233,7 @@ router.put('/product/:productId', validate(updateInventorySchema), async (req: A
       storeId
     });
 
-    res.json({ 
+    res.json({
       inventory: updatedInventory,
       message: 'Inventory updated successfully'
     });
@@ -442,86 +242,73 @@ router.put('/product/:productId', validate(updateInventorySchema), async (req: A
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/inventory/bulk-update:
- *   post:
- *     tags: [Store Admin]
- *     summary: Bulk update inventory items
- *     description: Update multiple inventory items in a single request
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               updates:
- *                 type: array
- *                 minItems: 1
- *                 items:
- *                   type: object
- *                   required:
- *                     - productId
- *                   properties:
- *                     productId:
- *                       type: string
- *                       description: Product ID
- *                     currentStock:
- *                       type: integer
- *                       minimum: 0
- *                       description: Current stock quantity
- *                     minStockLevel:
- *                       type: integer
- *                       minimum: 0
- *                       description: Minimum stock threshold
- *                     maxStockLevel:
- *                       type: integer
- *                       minimum: 0
- *                       description: Maximum stock threshold
- *                     adjustment:
- *                       type: integer
- *                       description: Stock adjustment amount
- *                     adjustmentReason:
- *                       type: string
- *                       maxLength: 500
- *                       description: Reason for stock adjustment
- *     responses:
- *       200:
- *         description: Inventory items updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 updatedCount:
- *                   type: integer
- *                   description: Number of items updated
- *                 updatedItems:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Inventory ID
- *                       productId:
- *                         type: string
- *                         description: Product ID
- *                       currentStock:
- *                         type: integer
- *                         description: Updated current stock
- *                       minStockLevel:
- *                         type: integer
- *                         description: Updated minimum stock level
- *                       maxStockLevel:
- *                         type: integer
- *                         description: Updated maximum stock level
- *                       lastUpdated:
- *                         type: string
- *                         format: date-time
- *                         description: Last update date
- */
+
+// Bulk inventory upload via SKU (POST and PUT supported)
+const bulkInventoryHandler = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  try {
+    const storeId = String(req.user!.storeId!);
+    // Accept either array or { items: array }
+    let items: any[] = [];
+    if (Array.isArray(req.body)) {
+      items = req.body;
+    } else if (Array.isArray(req.body.items)) {
+      items = req.body.items;
+    } else {
+      return res.status(400).json({
+        success: false,
+        errors: [{ field: '', message: 'Request body must be an array or an object with an "items" array property.' }]
+      });
+    }
+    // Validate each item (basic)
+    for (const [i, item] of items.entries()) {
+      if (!item || typeof item.sku !== 'string' || typeof item.stock !== 'number' || typeof item.minStock !== 'number' || typeof item.maxStock !== 'number') {
+        return res.status(400).json({
+          success: false,
+          errors: [{ field: `[${i}]`, message: 'Each item must have sku (string), stock, minStock, maxStock (numbers)' }]
+        });
+      }
+    }
+    let updated = 0;
+    const errors: { sku: string; error: string }[] = [];
+
+    for (const item of items) {
+      const { sku, stock, minStock, maxStock } = item;
+      // Find product by SKU for this store
+      const product = await prisma.product.findFirst({
+        where: { sku, storeId },
+      });
+      if (!product) {
+        errors.push({ sku, error: 'SKU not found' });
+        continue;
+      }
+      // Update or create inventory (assumes compound unique key productId_storeId exists)
+      await prisma.inventory.upsert({
+        where: { productId_storeId: { productId: String(product.id), storeId } },
+        update: {
+          currentStock: stock,
+          minStockLevel: minStock,
+          maxStockLevel: maxStock,
+        },
+        create: {
+          productId: String(product.id),
+          storeId,
+          currentStock: stock,
+          minStockLevel: minStock,
+          maxStockLevel: maxStock,
+        },
+      });
+      updated++;
+    }
+    return res.json({ success: true, updated, errors });
+  } catch (err) {
+    logger.error('Bulk inventory upload failed', err);
+    return next(createError('Bulk inventory upload failed', 500));
+  }
+};
+
+router.post('/bulk', validate(bulkUploadSchema), bulkInventoryHandler);
+router.put('/bulk', validate(bulkUploadSchema), bulkInventoryHandler);
+
 router.post('/bulk-update', validate(bulkUpdateSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
@@ -608,59 +395,7 @@ router.post('/bulk-update', validate(bulkUpdateSchema), async (req: Authenticate
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/inventory/low-stock:
- *   get:
- *     tags: [Store Admin]
- *     summary: Get low stock items
- *     description: Retrieve items with current stock below minimum threshold
- *     responses:
- *       200:
- *         description: List of low stock items retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 lowStockItems:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Inventory ID
- *                       productId:
- *                         type: string
- *                         description: Product ID
- *                       product:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           name:
- *                             type: string
- *                           sku:
- *                             type: string
- *                           category:
- *                             type: string
- *                           brand:
- *                             type: string
- *                       currentStock:
- *                         type: integer
- *                         description: Current stock quantity
- *                       minStockLevel:
- *                         type: integer
- *                         description: Minimum stock level
- *                       maxStockLevel:
- *                         type: integer
- *                         description: Maximum stock level
- *                       lastUpdated:
- *                         type: string
- *                         format: date-time
- *                         description: Last update date
- */
+
 router.get('/low-stock', async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
@@ -698,67 +433,7 @@ router.get('/low-stock', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-/**
- * @swagger
- * /api/storeadmin/inventory/send-low-stock-alert:
- *   post:
- *     tags: [Store Admin]
- *     summary: Send low stock alert email
- *     description: Send email notification about low stock items to store admins
- *     responses:
- *       200:
- *         description: Low stock alert email sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   description: Success message
- *                 recipients:
- *                   type: array
- *                   items:
- *                     type: string
- *                     description: Email addresses of recipients
- *                 lowStockItems:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         description: Inventory ID
- *                       productId:
- *                         type: string
- *                         description: Product ID
- *                       product:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           name:
- *                             type: string
- *                           sku:
- *                             type: string
- *                           category:
- *                             type: string
- *                           brand:
- *                             type: string
- *                       currentStock:
- *                         type: integer
- *                         description: Current stock quantity
- *                       minStockLevel:
- *                         type: integer
- *                         description: Minimum stock level
- *                       maxStockLevel:
- *                         type: integer
- *                         description: Maximum stock level
- *                       lastUpdated:
- *                         type: string
- *                         format: date-time
- *                         description: Last update date
- */
+
 router.post('/send-low-stock-alert', async (req: AuthenticatedRequest, res, next) => {
   try {
     const storeId = req.user!.storeId!;
@@ -807,7 +482,7 @@ router.post('/send-low-stock-alert', async (req: AuthenticatedRequest, res, next
     }
 
     // Send email to all store admins
-    const emailPromises = store.users.map((user: any) => 
+    const emailPromises = store.users.map((user: any) =>
       sendLowStockAlert(
         user.email,
         store.name,
@@ -828,7 +503,7 @@ router.post('/send-low-stock-alert', async (req: AuthenticatedRequest, res, next
       adminCount: store.users.length
     });
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Low stock alert sent successfully',
       lowStockCount: lowStockItems.length,
       emailsSent: store.users.length

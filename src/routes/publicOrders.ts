@@ -59,6 +59,7 @@ router.post(
   [
     (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
       const Joi = require('joi');
+      console.log('[DEBUG] Incoming request body:', req.body);
       // Address schema (matches Prisma Address model)
       const addressSchema = Joi.object({
         name: Joi.string().allow('', null),
@@ -77,7 +78,7 @@ router.post(
       });
       // Main schema
       const schema = Joi.object({
-        items: Joi.string().required(), // Will be parsed and validated below
+        items: Joi.alternatives().try(Joi.string(), Joi.array().items(orderItemSchema)).required(), // Accept string or array
         paymentMethod: Joi.string().required(),
         guestName: Joi.string().when(Joi.object({ userId: Joi.exist() }).unknown(), {
           then: Joi.optional(),
@@ -91,28 +92,31 @@ router.post(
           then: Joi.optional(),
           otherwise: Joi.required()
         }),
-        address: Joi.string().when(Joi.object({ userId: Joi.exist() }).unknown(), {
+        address: Joi.alternatives().try(Joi.string(), addressSchema).when(Joi.object({ userId: Joi.exist() }).unknown(), {
           then: Joi.optional(),
           otherwise: Joi.required()
         }),
-        addressId: Joi.string().when(Joi.object({ userId: Joi.exist() }).unknown(), {
-          then: Joi.required(),
-          otherwise: Joi.optional()
-        }),
+
         paymentScreenshot: Joi.any()
       });
       // Validate the base fields
       const { error } = schema.validate(req.body, { abortEarly: false });
       if (error) {
+        console.log('[DEBUG] Joi validation error:', error.details);
         return res.status(400).json({ error: error.details.map((d: import('joi').ValidationErrorItem) => d.message).join(', ') });
       }
+      console.log('[DEBUG] Passed Joi validation.');
       // Parse and validate items
-      let items;
-      try {
-        items = JSON.parse(req.body.items);
-      } catch {
-        return res.status(400).json({ error: 'Invalid items format (must be JSON array)' });
+      let items = req.body.items;
+      if (typeof items === 'string') {
+        try {
+          items = JSON.parse(items);
+        } catch {
+          console.log('[DEBUG] Failed to parse items:', req.body.items);
+          return res.status(400).json({ error: 'Invalid items format (must be JSON array)' });
+        }
       }
+      console.log('[DEBUG] Parsed items:', items);
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'At least one item is required' });
       }
@@ -124,14 +128,19 @@ router.post(
       }
       // Parse and validate address if provided
       if (req.body.address) {
-        let addressObj;
-        try {
-          addressObj = JSON.parse(req.body.address);
-        } catch {
-          return res.status(400).json({ error: 'Invalid address format (must be JSON object)' });
+        let addressObj = req.body.address;
+        if (typeof addressObj === 'string') {
+          try {
+            addressObj = JSON.parse(addressObj);
+          } catch {
+            console.log('[DEBUG] Failed to parse address:', req.body.address);
+            return res.status(400).json({ error: 'Invalid address format (must be JSON object)' });
+          }
         }
+        console.log('[DEBUG] Parsed address:', addressObj);
         const { error: addrErr } = addressSchema.validate(addressObj);
         if (addrErr) {
+          console.log('[DEBUG] Address validation error:', addrErr.details);
           return res.status(400).json({ error: `Invalid address: ${addrErr.details.map((d: import('joi').ValidationErrorItem) => d.message).join(', ')}` });
         }
       }
@@ -139,6 +148,7 @@ router.post(
     }
   ],
   async (req: AuthenticatedRequest, res: any, next: any) => {
+    console.log('[DEBUG] Entered public order handler. Body:', req.body);
     try {
       // Parse JSON fields if multipart/form-data
       let items, address;
@@ -264,33 +274,67 @@ router.post(
         }
       }
 
-      // Create order and order items atomically
-      const order = await prisma.order.create({
-        data: {
-          orderNumber,
-          userId: userId || null,
-          guestName: guestName || null,
-          guestEmail: guestEmail || null,
-          guestPhone: guestPhone || null,
-          addressId: orderAddressId,
-          storeId: items[0] ? (await prisma.product.findUnique({ where: { id: items[0].productId } }))!.storeId : '',
-          status: 'PAID',
-          subtotal,
-          totalAmount,
-          paymentMethod: paymentMethod || 'CASH',
-          paymentScreenshotUrl: paymentScreenshotUrl || null,
-          customerId: userId ? undefined : req.body._customerId, // Only for guest orders
-          orderItems: {
-            create: orderItems,
+      // Wrap all DB operations in a single transaction for atomicity
+      const { order, invoice } = await prisma.$transaction(async (tx) => {
+        // Deduct inventory for each item
+        for (const item of orderItems) {
+          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          if (!product) throw new Error(`Product not found: ${item.productId}`);
+          const inventory = await tx.inventory.findFirst({ where: { productId: item.productId, storeId: product.storeId } });
+          if (!inventory || inventory.currentStock < item.quantity) {
+            throw new Error(`Insufficient stock for product: ${product.name}`);
+          }
+          await tx.inventory.update({
+            where: { id: inventory.id },
+            data: { currentStock: { decrement: item.quantity } },
+          });
+        }
+
+        // Create order
+        const order = await tx.order.create({
+          data: {
+            orderNumber,
+            userId: userId || null,
+            guestName: guestName || null,
+            guestEmail: guestEmail || null,
+            guestPhone: guestPhone || null,
+            addressId: orderAddressId,
+            storeId: items[0] ? (await tx.product.findUnique({ where: { id: items[0].productId } }))!.storeId : '',
+            status: 'AWAITING_PAYMENT', // or 'PAID' if payment is confirmed
+            orderType: 'ONLINE',
+            subtotal,
+            totalAmount,
+            paymentMethod: paymentMethod || 'CASH',
+            paymentScreenshotUrl: paymentScreenshotUrl || null,
+            customerId: userId ? undefined : req.body._customerId, // Only for guest orders
+            orderItems: {
+              create: orderItems,
+            },
           },
-        },
-        include: {
-          orderItems: true,
-          address: true,
-        },
+          include: {
+            orderItems: true,
+            address: true,
+          },
+        });
+
+        // Generate invoice
+        const invoice = await tx.invoice.create({
+          data: {
+            invoiceNumber: 'INV-' + Date.now(),
+            orderId: order.id,
+            storeId: order.storeId,
+            customerId: order.customerId || undefined,
+            subtotal: order.subtotal,
+            totalAmount: order.totalAmount,
+            isPos: false,
+          },
+        });
+
+        return { order, invoice };
       });
 
       // Notify specific store admin(s) about new public order
+      // 'order' is now defined in scope due to destructuring above
       try {
         const { createNotification } = await import('../services/notification');
         const store = await prisma.store.findUnique({
@@ -356,8 +400,10 @@ router.post(
         orderId: order.id,
         trackingUrl: `/api/public/orders/track?orderNumber=${order.orderNumber}&email=${guestEmail || req.user?.email}`,
         order,
+        invoice,
       });
     } catch (error) {
+      console.log('[DEBUG] Error in public order handler:', error);
       next(error);
     }
   }

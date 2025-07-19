@@ -31,6 +31,11 @@ enum SubscriptionStatus {
   CANCELLED
 }
 
+enum OrderType {
+  ONLINE
+  WALKIN
+}
+
 model Store {
   id         String  @id @default(cuid())
   name       String
@@ -80,13 +85,13 @@ model Store {
   createdById String?
 
   // Relations
-  creator        User?             @relation("StoreCreator", fields: [createdById], references: [id])
-  users          User[]            @relation("StoreUsers")
-  products       Product[]
-  orders         Order[]
-  invoices       Invoice[]
-  customers      Customer[]
-  posReceipts    POSReceipt[]
+  creator   User?      @relation("StoreCreator", fields: [createdById], references: [id])
+  users     User[]     @relation("StoreUsers")
+  products  Product[]
+  orders    Order[]
+  invoices  Invoice[]
+  customers Customer[]
+
   socialLinks    SocialMediaLink[]
   inventories    Inventory[]
   subscriptions  Subscription[]
@@ -94,6 +99,8 @@ model Store {
   supportTickets SupportTicket[]
   Category       Category[]
   spendings      Spending[]
+  salesAgents    SalesAgent[]
+  posReceipts    POSReceipt[]      @relation("StorePOSReceipts")
 
   @@map("stores")
 }
@@ -186,7 +193,7 @@ model Product {
   // Relations
   store      Store       @relation(fields: [storeId], references: [id])
   category   Category?   @relation(fields: [categoryId], references: [id])
-  images     String[] // Array of image URLs
+  images     String[]
   inventory  Inventory[]
   orderItems OrderItem[]
 
@@ -271,6 +278,7 @@ model Order {
   guestPhone           String?
   addressId            String?
   storeId              String
+  orderType            OrderType   @default(ONLINE) // ONLINE or WALKIN
   status               OrderStatus @default(PAID)
   subtotal             Float
   totalAmount          Float
@@ -361,6 +369,21 @@ model Invoice {
   @@map("invoices")
 }
 
+model SalesAgent {
+  id             String   @id @default(cuid())
+  storeId        String
+  name           String
+  phone          String?
+  commissionRate Float // Personalized, set by storeadmin (e.g., 5, 10, 15, 20)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  store       Store        @relation(fields: [storeId], references: [id])
+  posReceipts POSReceipt[] @relation("SalesAgentPOSReceipts")
+}
+
 model POSReceipt {
   id             String    @id @default(cuid())
   receiptNumber  String    @unique
@@ -378,7 +401,9 @@ model POSReceipt {
   deletedAt      DateTime?
 
   // Relations
-  store Store @relation(fields: [storeId], references: [id])
+  store        Store       @relation("StorePOSReceipts", fields: [storeId], references: [id])
+  salesAgentId String?
+  salesAgent   SalesAgent? @relation("SalesAgentPOSReceipts", fields: [salesAgentId], references: [id])
 
   @@map("pos_receipts")
 }

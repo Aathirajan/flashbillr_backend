@@ -110,7 +110,8 @@ router.get('/', async (req: AuthenticatedRequest, res: Response, next: NextFunct
       prisma.product.findMany({
         where,
         include: {
-          inventory: true
+          inventory: true,
+          category: true
         },
         orderBy: { [sortBy]: sortOrder },
         skip,
@@ -125,7 +126,8 @@ router.get('/', async (req: AuthenticatedRequest, res: Response, next: NextFunct
         currentStock: product.inventory[0]?.currentStock || 0,
         minStockLevel: product.inventory[0]?.minStockLevel || 10,
         isLowStock: (product.inventory[0]?.currentStock || 0) <= (product.inventory[0]?.minStockLevel || 10),
-        images: product.images || []
+        images: product.images || [],
+        category: product.category || null
       })),
       pagination: {
         page: Number(page),
@@ -150,7 +152,8 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response, next: NextFu
     const product = await prisma.product.findFirst({
       where: { id, storeId, deletedAt: null },
       include: {
-        inventory: true
+        inventory: true,
+        category: true
       }
     });
 
@@ -175,7 +178,11 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response, next: NextFu
 // -----------------------------------
 router.post('/',
   upload.fields([{ name: 'images', maxCount: 5 }, { name: 'images[]', maxCount: 5 }]),
-  validateProductImages(true),
+  (req, _res, next) => {
+    if (req.body.images === "") req.body.images = undefined;
+    next();
+  },
+  validateProductImages(false),
   validate(createProductSchema),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
@@ -225,8 +232,9 @@ router.post('/',
           inventory: {
             create: {
               currentStock: req.body.inventory?.currentStock !== undefined ? Number(req.body.inventory.currentStock) : 0,
-              minStockLevel: req.body.inventory?.minStockLevel !== undefined ? Number(req.body.inventory.minStockLevel) : 10,
-              maxStockLevel: req.body.inventory?.maxStockLevel !== undefined ? Number(req.body.inventory.maxStockLevel) : 1000
+              minStockLevel: 15,
+              maxStockLevel: 1000,
+              storeId: storeId
             }
           }
         },

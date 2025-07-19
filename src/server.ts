@@ -15,6 +15,7 @@ import { logger } from './utils/logger';
 import authRoutes from './routes/auth';
 import publicRoutes from './routes/public';
 import publicCustomersRoutes from './routes/publicCustomers';
+import publicOrdersRouter from './routes/publicOrders';
 import storeadminRoutes from './routes/storeadmin';
 import superadminRoutes from './routes/superadmin';
 
@@ -213,6 +214,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/superadmin', superadminRoutes);
 app.use('/api/storeadmin', storeadminRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/public', publicOrdersRouter);
 app.use('/api/public/customers', publicCustomersRoutes);
 
 // Error handling middleware
