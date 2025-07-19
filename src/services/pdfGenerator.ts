@@ -11,6 +11,7 @@ export interface InvoiceData {
    storeGST?: string;
    brandColor?: string;
    customerName: string;
+   customerPhone?: string;
    customerAddress?: string;
    customerGST?: string;
    deliveryNote?: string;

@@ -17,7 +17,7 @@ interface InvoiceItem {
   name: string;
   quantity: number;
   unitPrice: number;
-  
+
   gstAmount: number;
   totalAmount: number;
 }
@@ -35,7 +35,7 @@ interface OrderItem {
   productId: string;
   quantity: number;
   unitPrice: number;
-  
+
   gstAmount: number;
   totalAmount: number;
 }
