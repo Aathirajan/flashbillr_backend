@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import { prisma } from '../../utils/database';
 import { validate } from '../../middleware/validation';
 import { createPOSReceiptSchema } from '../../utils/validation';
@@ -491,7 +492,9 @@ router.post('/', validate(createPOSReceiptSchema), async (req: AuthenticatedRequ
       total: result.totalAmount,
       totalInWords: convertNumberToWords(result.totalAmount)
     } as const;
-    const pdfBuffer = await generateInvoicePDF(invoiceData);
+    const outputPath = `/tmp/receipt_${result.receiptNumber}.pdf`;
+    await generateInvoicePDF(invoiceData, outputPath);
+    const pdfBuffer = fs.readFileSync(outputPath);
     const pdfUrl = await uploadInvoicePDF(pdfBuffer, storeId, result.receiptNumber);
 
     // 6. Update receipt with PDF URL and create invoice record

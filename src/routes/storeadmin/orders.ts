@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import multer from 'multer';
 import { prisma } from '../../utils/database';
 import { validate } from '../../middleware/validation';
@@ -734,7 +735,9 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
       modeOfPayment: invoiceData.paymentMethod
     };
 
-    const pdfBuffer = await generateInvoicePDF(pdfInvoiceData);
+    const outputPath = `/tmp/invoice_${invoiceNumber}.pdf`;
+    await generateInvoicePDF(pdfInvoiceData, outputPath);
+    const pdfBuffer = fs.readFileSync(outputPath);
     const pdfUrl = await uploadInvoicePDF(pdfBuffer, storeId, invoiceNumber);
 
     // Create invoice record
@@ -765,6 +768,31 @@ router.post('/', validate(createOrderSchema), async (req: AuthenticatedRequest, 
       } catch (emailError) {
         logger.error('Failed to send order confirmation email:', emailError);
       }
+    }
+
+    // WhatsApp notification to all store admins
+    try {
+      const storeAdmins = await prisma.user.findMany({
+        where: {
+          storeId,
+          role: 'STOREADMIN',
+          isActive: true,
+          deletedAt: null,
+          phone: { not: null }
+        },
+        select: { phone: true, firstName: true }
+      });
+      if (storeAdmins.length > 0) {
+        const { sendWhatsAppMessage } = require('../../utils/whatsapp');
+        const orderMsg = `New order placed!\nOrder #: ${orderNumber}\nCustomer: ${customer.firstName} ${customer.lastName}\nTotal: ₹${orderData.totalAmount}\nPlease check your dashboard for details.`;
+        await Promise.all(
+          storeAdmins.map((admin: any) =>
+            sendWhatsAppMessage(admin.phone.startsWith('+') ? admin.phone : `+91${admin.phone}`, orderMsg)
+          )
+        );
+      }
+    } catch (waError) {
+      logger.error('Failed to send WhatsApp notification to store admins:', waError);
     }
 
     logger.info('Order created successfully:', {

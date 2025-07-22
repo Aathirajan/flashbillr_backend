@@ -48,12 +48,11 @@ describe('generateInvoicePDF', () => {
       totalInWords: 'Two Hundred Thirty Six Only'
     }
     // Ensure all required fields for InvoiceData are present in mockInvoiceData. If you add fields to InvoiceData, add them here too.
-    const buffer = await generateInvoicePDF(mockInvoiceData as any);
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    expect(buffer.length).toBeGreaterThan(0);
-
-    // Save the PDF for manual inspection
-    fs.writeFileSync('test-invoice.pdf', buffer);
+    const outputPath = 'test-invoice.pdf';
+    await generateInvoicePDF(mockInvoiceData as any, outputPath);
+    const fileBuffer = fs.readFileSync(outputPath);
+    expect(Buffer.isBuffer(fileBuffer)).toBe(true);
+    expect(fileBuffer.length).toBeGreaterThan(0);
 
     // Optionally, save the PDF for manual inspection
     // fs.writeFileSync('test-invoice.pdf', buffer);
@@ -96,11 +95,10 @@ describe('generateInvoicePDF', () => {
       declaration: 'Goods once sold will not be taken back.'
     };
 
-    const buffer = await generateInvoicePDF(mockInvoiceData as any);
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    expect(buffer.length).toBeGreaterThan(0);
-
-    // Save the PDF for manual inspection
-    fs.writeFileSync('test-invoice-25-products.pdf', buffer);
+    const outputPath = 'test-invoice-25-products.pdf';
+    await generateInvoicePDF(mockInvoiceData as any, outputPath);
+    const fileBuffer = fs.readFileSync(outputPath);
+    expect(Buffer.isBuffer(fileBuffer)).toBe(true);
+    expect(fileBuffer.length).toBeGreaterThan(0);
   });
 });
