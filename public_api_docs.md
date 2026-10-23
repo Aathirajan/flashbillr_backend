@@ -105,10 +105,10 @@ Returns a paginated list of products for a store, with each product including it
   "products": [
     {
       "id": "prod_abc123",
-      "name": "Fancy Firecracker",
-      "description": "A dazzling firework.",
+      "name": "Sample Product",
+      "description": "An example product.",
       "categoryId": "cat_xyz",
-      "categoryName": "Fireworks",
+      "categoryName": "General",
       "brand": "SuperBrand",
       "sku": "FIRE-001",
       "mrp": 100,
@@ -138,8 +138,8 @@ Returns all categories for a store (only those with at least one product).
 ```json
 {
   "categories": [
-    { "id": "cat_xyz", "name": "Fireworks" },
-    { "id": "cat_abc", "name": "Sparklers" }
+    { "id": "cat_xyz", "name": "General" },
+    { "id": "cat_abc", "name": "Accessories" }
   ]
 }
 ```

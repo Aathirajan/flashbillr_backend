@@ -383,7 +383,7 @@ This documentation is generated directly from the backend codebase and is guaran
 
 Flashbillr is a backend system powering a multi-tenant retail platform, supporting three main frontend applications:
 
-- **Crackers Storefront**: The public-facing e-commerce site where customers can browse products, place orders, and track their purchases. This uses public and guest endpoints (e.g., `/api/publicOrders`).
+- **Storefront**: The public-facing e-commerce site where customers can browse products, place orders, and track their purchases. This uses public and guest endpoints (e.g., `/api/publicOrders`).
 - **Store Admin Panel**: Used by individual store managers to manage products, inventory, orders, POS, and customer data for their specific store. These endpoints are namespaced under `/api/storeadmin/*` and require store admin authentication.
 - **Super Admin Panel**: Used by platform administrators to manage all stores, users, subscriptions, and platform-wide settings. These endpoints are under `/api/superadmin/*` and require super admin authentication.
 
@@ -438,7 +438,7 @@ All endpoints are prefixed with `/api`.
 
 ## API Endpoint Groups
 
-### 1. Crackers Storefront (Public Endpoints)
+### 1. Storefront (Public Endpoints)
 
 #### Orders
 - **POST** `/api/public/orders` — Place an order as guest or authenticated user.

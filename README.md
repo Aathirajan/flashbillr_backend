@@ -1,6 +1,6 @@
 # Flashbillr Backend
 
-REST API for Flashbillr, a multi-tenant SaaS for fireworks retail. It powers the storefront, POS, inventory, invoicing and platform administration, with role-separated access (store admin / super admin). Built with Node.js, Express, TypeScript and Prisma on PostgreSQL.
+REST API for Flashbillr, a multi-tenant billing/POS and e-commerce platform. It powers the storefront, POS, inventory, invoicing and platform administration, with role-separated access (store admin / super admin). Built with Node.js, Express, TypeScript and Prisma on PostgreSQL.
 
 ## How to run
 
@@ -22,3 +22,5 @@ npm run build && npm start   # production
 ```
 
 Docker: `docker build -t flashbillr-backend .`
+
+License: MIT
